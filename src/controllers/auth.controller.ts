@@ -24,14 +24,3 @@ export const sync = async (req: AuthRequest, res: Response): Promise<void> => {
         sendError(res, message, 400);
     }
 };
-
-export const accountStatus = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-        const email = String(req.body.email ?? '');
-        const data = await AuthService.getAccountStatusByEmail(email);
-        sendSuccess(res, data);
-    } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Failed to inspect account';
-        sendError(res, message, 400);
-    }
-};
