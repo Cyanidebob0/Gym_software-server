@@ -26,6 +26,14 @@ setInterval(() => {
     }
 }, 60_000);
 
+// Invalidate all cache entries for a given user id (role changed in DB,
+// sync just ran, manual revoke, etc.). O(n) but n is tiny.
+export const invalidateAuthCacheForUser = (userId: string): void => {
+    for (const [token, val] of authCache) {
+        if (val.id === userId) authCache.delete(token);
+    }
+};
+
 export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const authHeader = req.headers.authorization;
 
@@ -62,14 +70,18 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     const role = (profile?.role ?? 'member') as UserRole;
     const gymId = profile?.gym_id ?? undefined;
 
-    // Cache for subsequent requests with the same token
-    authCache.set(token, {
-        id: user.id,
-        email: user.email ?? '',
-        role,
-        gym_id: gymId,
-        expiry: Date.now() + CACHE_TTL_MS,
-    });
+    // Only cache once a real profile row exists. Otherwise a request that
+    // races ahead of /auth/sync would pin role='member' for 5 minutes
+    // even after sync promotes the user.
+    if (profile) {
+        authCache.set(token, {
+            id: user.id,
+            email: user.email ?? '',
+            role,
+            gym_id: gymId,
+            expiry: Date.now() + CACHE_TTL_MS,
+        });
+    }
 
     req.user = {
         id: user.id,

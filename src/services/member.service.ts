@@ -202,10 +202,12 @@ export const getStatusByUserId = async (userId: string) => {
 
 // Member self-registration: create pending member
 export const selfRegister = async (userId: string, body: Record<string, any>) => {
-    // Find the single gym
+    // Single-tenant: pick the oldest gym deterministically so parallel
+    // self-registrations all land in the same place.
     const { data: gyms, error: gymError } = await supabase
         .from('gyms')
         .select('id')
+        .order('created_at', { ascending: true })
         .limit(1);
 
     if (gymError || !gyms?.length) throw new Error('No gym found');

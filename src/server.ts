@@ -1,3 +1,6 @@
+import { setDefaultResultOrder } from 'dns';
+setDefaultResultOrder('ipv4first');
+
 import './config/env'; // validate env first
 import app from './app';
 import { env } from './config/env';
