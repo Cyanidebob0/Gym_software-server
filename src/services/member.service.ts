@@ -13,9 +13,20 @@ const getOrCreateDefaultGymId = async () => {
     if (gymError) throw new Error(gymError.message);
     if (gyms?.length) return gyms[0].id;
 
+    const { data: owner, error: ownerError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('role', 'owner')
+        .limit(1)
+        .single();
+
+    if (ownerError || !owner) {
+        throw new Error('No owner found to create the default gym');
+    }
+
     const { data: createdGym, error: createGymError } = await supabase
         .from('gyms')
-        .insert({ name: DEFAULT_GYM_NAME })
+        .insert({ name: DEFAULT_GYM_NAME, owner_id: owner.id })
         .select('id')
         .single();
 
