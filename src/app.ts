@@ -8,11 +8,6 @@ import routes from './routes';
 import { errorHandler, notFound } from './middleware/error.middleware';
 
 const app = express();
-const authBootstrapPaths = new Set([
-    '/api/v1/auth/me',
-    '/api/v1/auth/sync',
-    '/api/v1/auth/account-status',
-]);
 
 // Security
 app.use(helmet());
@@ -24,7 +19,6 @@ app.use(
         windowMs: 15 * 60 * 1000,
         max: env.nodeEnv === 'development' ? 1000 : 100,
         message: { success: false, message: 'Too many requests, please try again later.' },
-        skip: (req) => authBootstrapPaths.has(req.path),
     })
 );
 
