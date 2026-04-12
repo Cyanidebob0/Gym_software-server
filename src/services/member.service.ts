@@ -2,6 +2,30 @@ import supabase from '../config/supabase';
 import { generateInvoiceId } from './payment.service';
 import { get as getSettings } from './settings.service';
 
+const DEFAULT_GYM_NAME = 'Sweat Zone';
+
+const getOrCreateDefaultGymId = async () => {
+    const { data: gyms, error: gymError } = await supabase
+        .from('gyms')
+        .select('id')
+        .limit(1);
+
+    if (gymError) throw new Error(gymError.message);
+    if (gyms?.length) return gyms[0].id;
+
+    const { data: createdGym, error: createGymError } = await supabase
+        .from('gyms')
+        .insert({ name: DEFAULT_GYM_NAME })
+        .select('id')
+        .single();
+
+    if (createGymError || !createdGym) {
+        throw new Error(createGymError?.message ?? 'Failed to create default gym');
+    }
+
+    return createdGym.id;
+};
+
 // Compute effective status based on expiry_date + gym settings
 const computeStatus = (
     member: any,
@@ -202,14 +226,7 @@ export const getStatusByUserId = async (userId: string) => {
 
 // Member self-registration: create pending member
 export const selfRegister = async (userId: string, body: Record<string, any>) => {
-    // Find the single gym
-    const { data: gyms, error: gymError } = await supabase
-        .from('gyms')
-        .select('id')
-        .limit(1);
-
-    if (gymError || !gyms?.length) throw new Error('No gym found');
-    const gymId = gyms[0].id;
+    const gymId = await getOrCreateDefaultGymId();
 
     // Check if already registered
     const existing = await getStatusByUserId(userId);
