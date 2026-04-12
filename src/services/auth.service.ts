@@ -15,10 +15,20 @@ export const getMe = async (userId: string) => {
 };
 
 // Called by a webhook or post-signup trigger to sync Supabase Auth user → users table
+// Only inserts if the user doesn't exist yet — never overwrites existing role/gym_id
 export const syncUser = async (id: string, email: string, name?: string) => {
+    // Check if user already exists
+    const { data: existing } = await supabase
+        .from('users')
+        .select('id, email, role')
+        .eq('id', id)
+        .single();
+
+    if (existing) return existing; // Already synced — don't overwrite
+
     const { data, error } = await supabase
         .from('users')
-        .upsert({ id, email, name: name ?? '', role: 'member' }, { onConflict: 'id' })
+        .insert({ id, email, name: name ?? '', role: 'member' })
         .select('id, email, role')
         .single();
 

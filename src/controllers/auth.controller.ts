@@ -12,3 +12,15 @@ export const me = async (req: AuthRequest, res: Response): Promise<void> => {
         sendError(res, message, 400);
     }
 };
+
+export const sync = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const { id, email } = req.user!;
+        const name = req.body.name as string | undefined;
+        const data = await AuthService.syncUser(id, email, name);
+        sendSuccess(res, data, 'User synced');
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to sync user';
+        sendError(res, message, 400);
+    }
+};

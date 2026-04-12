@@ -21,4 +21,8 @@ export const env = {
     supabaseUrl: process.env.SUPABASE_URL as string,
     supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY as string,
     supabaseAnonKey: process.env.SUPABASE_ANON_KEY as string,
+    exerciseDatasetPath: process.env.EXERCISE_DATASET_PATH ?? './data/free-exercise-db.raw.json',
+    exerciseDatasetImageBaseUrl:
+        process.env.EXERCISE_DATASET_IMAGE_BASE_URL
+        ?? 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/',
 };
