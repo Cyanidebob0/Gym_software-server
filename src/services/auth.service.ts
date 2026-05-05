@@ -106,6 +106,25 @@ export const syncUser = async (
     return { user: data, changed: true };
 };
 
+// Link a password to an existing OAuth-only account.
+// Uses the admin API to set the password so the user can also login with email.
+export const linkPassword = async (email: string, password: string): Promise<void> => {
+    // Find the user by email
+    const { data: { users }, error: listErr } = await supabase.auth.admin.listUsers();
+    if (listErr) throw new Error('Failed to look up user');
+
+    const authUser = users.find(u => u.email?.toLowerCase() === email.toLowerCase());
+    if (!authUser) throw new Error('No account found with this email');
+
+    // Verify user has a google identity (is OAuth-only)
+    const hasGoogle = authUser.identities?.some(i => i.provider === 'google');
+    if (!hasGoogle) throw new Error('Account is not an OAuth account');
+
+    // Set the password via admin API
+    const { error } = await supabase.auth.admin.updateUserById(authUser.id, { password });
+    if (error) throw new Error('Failed to link password');
+};
+
 // Single-tenant shortcut: each owner gets exactly one gym, auto-provisioned
 // on first sync. Race-safe via the unique constraint on gyms.owner_id —
 // concurrent syncs both read empty, but only one insert wins; the loser
