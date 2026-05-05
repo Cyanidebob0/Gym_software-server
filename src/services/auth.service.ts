@@ -106,6 +106,15 @@ export const syncUser = async (
     return { user: data, changed: true };
 };
 
+// Check if an email exists in auth and whether it's OAuth-only.
+export const checkProvider = async (email: string): Promise<{ exists: boolean; isOAuth: boolean }> => {
+    const { data, error } = await supabase.rpc('check_email_provider', {
+        lookup_email: email,
+    });
+    if (error || !data) return { exists: false, isOAuth: false };
+    return { exists: data.exists, isOAuth: data.is_oauth };
+};
+
 // Link a password to an existing OAuth-only account.
 // Uses the admin API to set the password so the user can also login with email.
 export const linkPassword = async (email: string, password: string): Promise<void> => {

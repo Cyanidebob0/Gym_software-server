@@ -28,6 +28,18 @@ export const sync = async (req: AuthRequest, res: Response): Promise<void> => {
     }
 };
 
+export const checkProvider = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { email } = req.body;
+        if (!email) { sendError(res, 'Email is required', 400); return; }
+        const result = await AuthService.checkProvider(email);
+        sendSuccess(res, result);
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Check failed';
+        sendError(res, message, 400);
+    }
+};
+
 export const linkPassword = async (req: Request, res: Response): Promise<void> => {
     try {
         const { email, password } = req.body;

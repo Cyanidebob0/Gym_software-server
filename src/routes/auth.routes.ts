@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { me, sync, linkPassword } from '../controllers/auth.controller';
+import { me, sync, linkPassword, checkProvider } from '../controllers/auth.controller';
 import { authenticate } from '../middleware/auth.middleware';
 
 const router = Router();
@@ -11,7 +11,10 @@ router.get('/me', authenticate, me);
 // Sync Supabase Auth user → users table (called after signup/OAuth)
 router.post('/sync', authenticate, sync);
 
-// Link a password to an existing OAuth-only account (no auth required — validates email exists as OAuth)
+// Check if email exists as OAuth-only account
+router.post('/check-provider', checkProvider);
+
+// Link a password to an existing OAuth-only account
 router.post('/link-password', linkPassword);
 
 export default router;
