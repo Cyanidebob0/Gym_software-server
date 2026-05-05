@@ -1,4 +1,7 @@
 import supabase from '../config/supabase';
+import { getStats as getMemberStats, getAll as getAllMembers } from './member-admin.service';
+import { getStats as getPaymentStats } from './payment.service';
+import { getTodayStats } from './attendance.service';
 
 // Revenue per month for last 6 months
 export const getMonthlyRevenue = async (gymId: string) => {
@@ -94,13 +97,26 @@ export const getMemberGrowth = async (gymId: string) => {
     return months;
 };
 
-// Full dashboard payload
+// Full dashboard payload — single endpoint for the entire owner dashboard page
 export const getDashboard = async (gymId: string) => {
-    const [monthlyRevenue, revenueChange, weeklyAttendance, memberGrowth] = await Promise.all([
+    const [
+        monthlyRevenue,
+        revenueChange,
+        weeklyAttendance,
+        memberGrowth,
+        memberStats,
+        paymentStats,
+        todayAttendance,
+        members,
+    ] = await Promise.all([
         getMonthlyRevenue(gymId),
         getRevenueChange(gymId),
         getWeeklyAttendance(gymId),
         getMemberGrowth(gymId),
+        getMemberStats(gymId),
+        getPaymentStats(gymId),
+        getTodayStats(gymId),
+        getAllMembers(gymId, 50, 0),
     ]);
 
     return {
@@ -108,5 +124,9 @@ export const getDashboard = async (gymId: string) => {
         revenue_change: revenueChange,
         weekly_attendance: weeklyAttendance,
         member_growth: memberGrowth,
+        member_stats: memberStats,
+        payment_stats: paymentStats,
+        today_attendance: todayAttendance,
+        members,
     };
 };
