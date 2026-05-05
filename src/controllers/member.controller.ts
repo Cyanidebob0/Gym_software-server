@@ -1,11 +1,13 @@
 import { Response } from 'express';
 import { sendSuccess, sendError } from '../utils/response';
 import { AuthRequest } from '../types/express.d';
+import { parsePagination } from '../utils/pagination';
 import * as MemberService from '../services/member.service';
 
 export const getAll = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await MemberService.getAll(req.user!.gym_id!);
+        const { limit, offset } = parsePagination(req);
+        const data = await MemberService.getAll(req.user!.gym_id!, limit, offset);
         sendSuccess(res, data);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to fetch members';

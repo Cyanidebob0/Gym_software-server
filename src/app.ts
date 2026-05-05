@@ -17,7 +17,7 @@ app.use(cors({ origin: env.clientUrl, credentials: true }));
 app.use(
     rateLimit({
         windowMs: 15 * 60 * 1000,
-        max: env.nodeEnv === 'development' ? 1000 : 100,
+        max: env.nodeEnv === 'development' ? 5000 : 300,
         message: { success: false, message: 'Too many requests, please try again later.' },
     })
 );

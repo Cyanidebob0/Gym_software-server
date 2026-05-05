@@ -1,11 +1,15 @@
 import supabase from '../config/supabase';
 
-export const getAll = async (gymId: string) => {
-    const { data, error } = await supabase
+export const getAll = async (gymId: string, limit?: number, offset?: number) => {
+    let query = supabase
         .from('broadcasts')
         .select('*')
         .eq('gym_id', gymId)
         .order('sent_at', { ascending: false });
+
+    if (limit !== undefined) query = query.range(offset || 0, (offset || 0) + limit - 1);
+
+    const { data, error } = await query;
 
     if (error) throw new Error(error.message);
     return data;
