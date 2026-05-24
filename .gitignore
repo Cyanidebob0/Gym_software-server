@@ -15,3 +15,6 @@ Thumbs.db
 .vscode/
 *.tmp
 *.log
+
+# Runtime exercise cache (regenerated from ExerciseDB on first boot)
+data/exercisedb-cache.json

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
 import { authorize } from '../middleware/role.middleware';
 import { validate } from '../middleware/validate.middleware';
-import { selfRegisterMemberSchema, memberPaymentSchema } from '../validators/member.validator';
+import { selfRegisterMemberSchema, memberPaymentSchema, updateProfileSchema } from '../validators/member.validator';
 import * as MemberController from '../controllers/member.controller';
 
 const router = Router();
@@ -18,7 +18,7 @@ router.post('/activate', validate(memberPaymentSchema), MemberController.activat
 
 // Existing self-service
 router.get('/profile', MemberController.getMyProfile);
-router.patch('/profile', MemberController.updateMyProfile);
+router.patch('/profile', validate(updateProfileSchema), MemberController.updateMyProfile);
 router.get('/attendance', MemberController.getMyAttendance);
 router.get('/payments', MemberController.getMyPayments);
 router.get('/broadcasts', MemberController.getMyBroadcasts);

@@ -9,19 +9,47 @@ const parseExerciseIdParam = (value: string | string[] | undefined) => {
     return /^\d+$/.test(normalized) ? Number(normalized) : normalized;
 };
 
+const asString = (value: unknown): string | undefined => {
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
+};
+
 export const getExercises = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const { search, category, limit, offset } = req.query;
-        const data = await WorkoutService.getExercises(
-            search as string | undefined,
-            category as string | undefined,
-            Number(limit) || 20,
-            Number(offset) || 0,
-        );
+        const { search, bodyPart, muscle, equipment, limit, offset } = req.query;
+        const data = await WorkoutService.getExercises({
+            search: asString(search),
+            bodyPart: asString(bodyPart),
+            muscle: asString(muscle),
+            equipment: asString(equipment),
+            limit: Number(limit) || 20,
+            offset: Number(offset) || 0,
+        });
         sendSuccess(res, data);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to fetch exercises';
         sendError(res, message, 400);
+    }
+};
+
+export const getExerciseFilters = async (_req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const data = await WorkoutService.getExerciseFilters();
+        sendSuccess(res, data);
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to fetch exercise filters';
+        sendError(res, message, 400);
+    }
+};
+
+export const refreshExercises = async (_req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const data = await WorkoutService.refreshExercises();
+        sendSuccess(res, data, 'Exercise cache refreshed');
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to refresh exercise cache';
+        sendError(res, message, 500);
     }
 };
 
@@ -83,6 +111,25 @@ export const deleteSession = async (req: AuthRequest, res: Response): Promise<vo
         sendSuccess(res, null, 'Session deleted');
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to delete session';
+        sendError(res, message, 400);
+    }
+};
+
+export const uploadSessionPhotos = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const files = (req.files as Express.Multer.File[] | undefined) || [];
+        if (files.length === 0) {
+            sendError(res, 'No files uploaded', 400);
+            return;
+        }
+        const urls = await WorkoutService.uploadSessionPhotos(
+            req.user!.id,
+            req.params.id as string,
+            files.map((f) => ({ buffer: f.buffer, mimetype: f.mimetype, size: f.size })),
+        );
+        sendSuccess(res, { image_urls: urls }, 'Photos uploaded');
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to upload photos';
         sendError(res, message, 400);
     }
 };

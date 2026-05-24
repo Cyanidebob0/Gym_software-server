@@ -29,3 +29,11 @@ export const memberPaymentSchema = z.object({
     method: z.enum(['cash', 'upi', 'card']),
     amount: z.number().positive('Amount must be positive'),
 });
+
+export const updateProfileSchema = z.object({
+    phone: z.string().min(10, 'Phone must be at least 10 digits').optional(),
+    address: z.string().max(500).optional(),
+    gender: z.string().max(20).optional(),
+}).refine((data) => Object.keys(data).length > 0, {
+    message: 'At least one field must be provided',
+});

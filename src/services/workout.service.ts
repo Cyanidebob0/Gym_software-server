@@ -1,7 +1,23 @@
 import supabase from '../config/supabase';
-import { getExerciseById, searchExercises } from './exercise-provider.service';
+import {
+    getBodyParts,
+    getEquipmentList,
+    getExerciseById,
+    getMuscleList,
+    refreshExerciseCache,
+    searchExercises,
+} from './exercise-provider.service';
 
 type ExerciseId = string | number;
+
+type ExerciseQueryOptions = {
+    search?: string;
+    bodyPart?: string;
+    muscle?: string;
+    equipment?: string;
+    limit?: number;
+    offset?: number;
+};
 
 const getMemberId = async (userId: string): Promise<string> => {
     const { data } = await supabase
@@ -14,16 +30,32 @@ const getMemberId = async (userId: string): Promise<string> => {
     return data.id;
 };
 
-export const getExercises = async (search?: string, _category?: string, limit = 20, offset = 0) => {
-    if (!search || !search.trim()) {
-        return [];
-    }
-
-    return searchExercises(search, limit, offset);
+export const getExercises = async ({
+    search = '',
+    bodyPart,
+    muscle,
+    equipment,
+    limit = 20,
+    offset = 0,
+}: ExerciseQueryOptions = {}) => {
+    return searchExercises(search, limit, offset, { bodyPart, muscle, equipment });
 };
 
 export const getExerciseDetail = async (exerciseId: ExerciseId) => {
     return getExerciseById(exerciseId);
+};
+
+export const getExerciseFilters = async () => {
+    const [bodyParts, muscles, equipments] = await Promise.all([
+        getBodyParts(),
+        getMuscleList(),
+        getEquipmentList(),
+    ]);
+    return { bodyParts, muscles, equipments };
+};
+
+export const refreshExercises = async () => {
+    return refreshExerciseCache();
 };
 
 export const getSessions = async (userId: string, limit = 20, offset = 0) => {
@@ -105,6 +137,81 @@ export const updateSession = async (userId: string, sessionId: string, body: any
 
     if (error) throw new Error(error.message);
     return data;
+};
+
+const PHOTO_BUCKET = 'workout-photos';
+const ALLOWED_PHOTO_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_PHOTOS_PER_SESSION = 8;
+
+const extFor = (mime: string): string => {
+    if (mime === 'image/jpeg') return 'jpg';
+    if (mime === 'image/png') return 'png';
+    if (mime === 'image/webp') return 'webp';
+    if (mime === 'image/gif') return 'gif';
+    return 'bin';
+};
+
+export const uploadSessionPhotos = async (
+    userId: string,
+    sessionId: string,
+    files: Array<{ buffer: Buffer; mimetype: string; size: number }>,
+): Promise<string[]> => {
+    const memberId = await getMemberId(userId);
+
+    // Verify the session belongs to this member and fetch existing urls
+    const { data: session, error: fetchErr } = await supabase
+        .from('workout_sessions')
+        .select('id, image_urls')
+        .eq('id', sessionId)
+        .eq('member_id', memberId)
+        .single();
+
+    if (fetchErr || !session) throw new Error('Session not found');
+
+    const existing: string[] = Array.isArray((session as any).image_urls) ? (session as any).image_urls : [];
+    const remainingSlots = MAX_PHOTOS_PER_SESSION - existing.length;
+    if (remainingSlots <= 0) {
+        throw new Error(`Session already has the maximum of ${MAX_PHOTOS_PER_SESSION} photos`);
+    }
+
+    const accepted = files.slice(0, remainingSlots);
+    const newUrls: string[] = [];
+
+    for (const file of accepted) {
+        if (!ALLOWED_PHOTO_MIME.has(file.mimetype)) {
+            throw new Error(`Unsupported file type: ${file.mimetype}`);
+        }
+        if (file.size > MAX_PHOTO_SIZE) {
+            throw new Error('File exceeds the 10 MB limit');
+        }
+
+        const ext = extFor(file.mimetype);
+        const random = Math.random().toString(36).slice(2, 10);
+        const path = `${userId}/${sessionId}/${Date.now()}-${random}.${ext}`;
+
+        const { error: uploadErr } = await supabase.storage
+            .from(PHOTO_BUCKET)
+            .upload(path, file.buffer, {
+                contentType: file.mimetype,
+                upsert: false,
+            });
+        if (uploadErr) throw new Error(uploadErr.message);
+
+        const { data: urlData } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path);
+        newUrls.push(urlData.publicUrl);
+    }
+
+    const merged = [...existing, ...newUrls];
+
+    const { error: updateErr } = await supabase
+        .from('workout_sessions')
+        .update({ image_urls: merged })
+        .eq('id', sessionId)
+        .eq('member_id', memberId);
+    if (updateErr) throw new Error(updateErr.message);
+
+    return merged;
 };
 
 export const deleteSession = async (userId: string, sessionId: string) => {
