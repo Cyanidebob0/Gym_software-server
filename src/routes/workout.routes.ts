@@ -3,7 +3,7 @@ import multer from 'multer';
 import { authenticate } from '../middleware/auth.middleware';
 import { authorize } from '../middleware/role.middleware';
 import { validate } from '../middleware/validate.middleware';
-import { createSessionSchema, updateSessionSchema } from '../validators/workout.validator';
+import { createSessionSchema, updateSessionSchema, saveExerciseSchema } from '../validators/workout.validator';
 import * as WorkoutController from '../controllers/workout.controller';
 
 const router = Router();
@@ -39,5 +39,10 @@ router.delete('/sessions/:id', WorkoutController.deleteSession);
 
 // Progress
 router.get('/progress/:exerciseId', WorkoutController.getProgress);
+
+// Saved exercises
+router.get('/saved', WorkoutController.getSavedExercises);
+router.post('/saved', validate(saveExerciseSchema), WorkoutController.saveExercise);
+router.delete('/saved/:exerciseId', WorkoutController.unsaveExercise);
 
 export default router;

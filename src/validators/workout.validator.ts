@@ -25,3 +25,9 @@ export const updateSessionSchema = z.object({
     notes: z.string().max(500).optional(),
     duration_min: z.number().int().min(1).max(600).optional(),
 });
+
+export const saveExerciseSchema = z.object({
+    exercise_id: exerciseIdSchema,
+    exercise_name: z.string().max(200).optional(),
+    image_url: z.string().max(1000).optional(),
+});

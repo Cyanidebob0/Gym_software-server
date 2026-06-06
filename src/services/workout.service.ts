@@ -252,3 +252,54 @@ export const getProgress = async (userId: string, exerciseId: ExerciseId) => {
 
     return Object.entries(byDate).map(([date, stats]) => ({ date, ...stats }));
 };
+
+// ── Saved exercises ───────────────────────────────────────────────────────────
+
+export const getSavedExercises = async (userId: string) => {
+    const memberId = await getMemberId(userId);
+
+    const { data, error } = await supabase
+        .from('saved_exercises')
+        .select('*')
+        .eq('member_id', memberId)
+        .order('created_at', { ascending: false });
+
+    if (error) throw new Error(error.message);
+    return data;
+};
+
+export const saveExercise = async (
+    userId: string,
+    body: { exercise_id: ExerciseId; exercise_name?: string; image_url?: string },
+) => {
+    const memberId = await getMemberId(userId);
+
+    const { data, error } = await supabase
+        .from('saved_exercises')
+        .upsert(
+            {
+                member_id: memberId,
+                exercise_id: String(body.exercise_id),
+                exercise_name: body.exercise_name ?? null,
+                image_url: body.image_url ?? null,
+            },
+            { onConflict: 'member_id,exercise_id' },
+        )
+        .select()
+        .single();
+
+    if (error) throw new Error(error.message);
+    return data;
+};
+
+export const unsaveExercise = async (userId: string, exerciseId: ExerciseId) => {
+    const memberId = await getMemberId(userId);
+
+    const { error } = await supabase
+        .from('saved_exercises')
+        .delete()
+        .eq('member_id', memberId)
+        .eq('exercise_id', String(exerciseId));
+
+    if (error) throw new Error(error.message);
+};

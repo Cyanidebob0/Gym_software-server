@@ -144,3 +144,34 @@ export const getProgress = async (req: AuthRequest, res: Response): Promise<void
         sendError(res, message, 400);
     }
 };
+
+export const getSavedExercises = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const data = await WorkoutService.getSavedExercises(req.user!.id);
+        sendSuccess(res, data);
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to fetch saved exercises';
+        sendError(res, message, 400);
+    }
+};
+
+export const saveExercise = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const data = await WorkoutService.saveExercise(req.user!.id, req.body);
+        sendSuccess(res, data, 'Exercise saved', 201);
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to save exercise';
+        sendError(res, message, 400);
+    }
+};
+
+export const unsaveExercise = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const exerciseId = parseExerciseIdParam(req.params.exerciseId);
+        await WorkoutService.unsaveExercise(req.user!.id, exerciseId);
+        sendSuccess(res, null, 'Exercise removed');
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to remove saved exercise';
+        sendError(res, message, 400);
+    }
+};
