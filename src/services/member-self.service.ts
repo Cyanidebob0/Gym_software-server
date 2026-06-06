@@ -62,7 +62,7 @@ export const getPaymentsByUserId = async (userId: string) => {
     return data.map((p: any) => ({ ...p, plan_name: p.plans?.name ?? null, plans: undefined }));
 };
 
-export const updateProfileByUserId = async (userId: string, body: { phone?: string; address?: string; gender?: string }) => {
+export const updateProfileByUserId = async (userId: string, body: { name?: string; phone?: string; address?: string; gender?: string }) => {
     const { data: member } = await supabase
         .from('members')
         .select('id')
@@ -72,6 +72,7 @@ export const updateProfileByUserId = async (userId: string, body: { phone?: stri
     if (!member) throw new Error('Member not found');
 
     const allowed: Record<string, any> = {};
+    if (body.name !== undefined) allowed.name = body.name;
     if (body.phone !== undefined) allowed.phone = body.phone;
     if (body.address !== undefined) allowed.address = body.address;
     if (body.gender !== undefined) allowed.gender = body.gender;

@@ -31,6 +31,7 @@ export const memberPaymentSchema = z.object({
 });
 
 export const updateProfileSchema = z.object({
+    name: z.string().min(1, 'Name is required').max(100).optional(),
     phone: z.string().min(10, 'Phone must be at least 10 digits').optional(),
     address: z.string().max(500).optional(),
     gender: z.string().max(20).optional(),
