@@ -175,3 +175,68 @@ export const unsaveExercise = async (req: AuthRequest, res: Response): Promise<v
         sendError(res, message, 400);
     }
 };
+
+export const getPlaylists = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const data = await WorkoutService.getPlaylists(req.user!.id);
+        sendSuccess(res, data);
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to fetch playlists';
+        sendError(res, message, 400);
+    }
+};
+
+export const createPlaylist = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const data = await WorkoutService.createPlaylist(req.user!.id, req.body);
+        sendSuccess(res, data, 'Playlist created', 201);
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to create playlist';
+        sendError(res, message, 400);
+    }
+};
+
+export const updatePlaylist = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const data = await WorkoutService.updatePlaylist(req.user!.id, req.params.id as string, req.body);
+        sendSuccess(res, data, 'Playlist updated');
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to update playlist';
+        sendError(res, message, 400);
+    }
+};
+
+export const deletePlaylist = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        await WorkoutService.deletePlaylist(req.user!.id, req.params.id as string);
+        sendSuccess(res, null, 'Playlist deleted');
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to delete playlist';
+        sendError(res, message, 400);
+    }
+};
+
+export const addPlaylistExercises = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const data = await WorkoutService.addPlaylistExercises(
+            req.user!.id,
+            req.params.id as string,
+            req.body.exercises,
+        );
+        sendSuccess(res, data, 'Exercises added', 201);
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to add exercises';
+        sendError(res, message, 400);
+    }
+};
+
+export const removePlaylistExercise = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const exerciseId = parseExerciseIdParam(req.params.exerciseId);
+        await WorkoutService.removePlaylistExercise(req.user!.id, req.params.id as string, exerciseId);
+        sendSuccess(res, null, 'Exercise removed');
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to remove exercise';
+        sendError(res, message, 400);
+    }
+};

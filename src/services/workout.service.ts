@@ -303,3 +303,119 @@ export const unsaveExercise = async (userId: string, exerciseId: ExerciseId) => 
 
     if (error) throw new Error(error.message);
 };
+
+// ── Playlists ─────────────────────────────────────────────────────────────────
+
+const ensureOwnedPlaylist = async (memberId: string, playlistId: string) => {
+    const { data, error } = await supabase
+        .from('playlists')
+        .select('id')
+        .eq('id', playlistId)
+        .eq('member_id', memberId)
+        .single();
+    if (error || !data) throw new Error('Playlist not found');
+    return data;
+};
+
+export const getPlaylists = async (userId: string) => {
+    const memberId = await getMemberId(userId);
+
+    const { data, error } = await supabase
+        .from('playlists')
+        .select('*, playlist_exercises(*)')
+        .eq('member_id', memberId)
+        .order('created_at', { ascending: false });
+
+    if (error) throw new Error(error.message);
+    return data;
+};
+
+export const createPlaylist = async (userId: string, body: { name: string; color?: string }) => {
+    const memberId = await getMemberId(userId);
+
+    const { data, error } = await supabase
+        .from('playlists')
+        .insert({ member_id: memberId, name: body.name, color: body.color ?? null })
+        .select('*, playlist_exercises(*)')
+        .single();
+
+    if (error) throw new Error(error.message);
+    return data;
+};
+
+export const updatePlaylist = async (
+    userId: string,
+    playlistId: string,
+    body: { name?: string; color?: string },
+) => {
+    const memberId = await getMemberId(userId);
+    await ensureOwnedPlaylist(memberId, playlistId);
+
+    const update: Record<string, unknown> = {};
+    if (body.name !== undefined) update.name = body.name;
+    if (body.color !== undefined) update.color = body.color;
+
+    const { data, error } = await supabase
+        .from('playlists')
+        .update(update)
+        .eq('id', playlistId)
+        .eq('member_id', memberId)
+        .select('*, playlist_exercises(*)')
+        .single();
+
+    if (error) throw new Error(error.message);
+    return data;
+};
+
+export const deletePlaylist = async (userId: string, playlistId: string) => {
+    const memberId = await getMemberId(userId);
+
+    const { error } = await supabase
+        .from('playlists')
+        .delete()
+        .eq('id', playlistId)
+        .eq('member_id', memberId);
+
+    if (error) throw new Error(error.message);
+};
+
+export const addPlaylistExercises = async (
+    userId: string,
+    playlistId: string,
+    exercises: Array<{ exercise_id: ExerciseId; exercise_name?: string; image_url?: string }>,
+) => {
+    const memberId = await getMemberId(userId);
+    await ensureOwnedPlaylist(memberId, playlistId);
+
+    const rows = exercises.map((e) => ({
+        playlist_id: playlistId,
+        exercise_id: String(e.exercise_id),
+        exercise_name: e.exercise_name ?? null,
+        image_url: e.image_url ?? null,
+    }));
+
+    const { data, error } = await supabase
+        .from('playlist_exercises')
+        .upsert(rows, { onConflict: 'playlist_id,exercise_id', ignoreDuplicates: true })
+        .select();
+
+    if (error) throw new Error(error.message);
+    return data;
+};
+
+export const removePlaylistExercise = async (
+    userId: string,
+    playlistId: string,
+    exerciseId: ExerciseId,
+) => {
+    const memberId = await getMemberId(userId);
+    await ensureOwnedPlaylist(memberId, playlistId);
+
+    const { error } = await supabase
+        .from('playlist_exercises')
+        .delete()
+        .eq('playlist_id', playlistId)
+        .eq('exercise_id', String(exerciseId));
+
+    if (error) throw new Error(error.message);
+};

@@ -3,7 +3,14 @@ import multer from 'multer';
 import { authenticate } from '../middleware/auth.middleware';
 import { authorize } from '../middleware/role.middleware';
 import { validate } from '../middleware/validate.middleware';
-import { createSessionSchema, updateSessionSchema, saveExerciseSchema } from '../validators/workout.validator';
+import {
+    createSessionSchema,
+    updateSessionSchema,
+    saveExerciseSchema,
+    createPlaylistSchema,
+    updatePlaylistSchema,
+    addPlaylistExercisesSchema,
+} from '../validators/workout.validator';
 import * as WorkoutController from '../controllers/workout.controller';
 
 const router = Router();
@@ -44,5 +51,13 @@ router.get('/progress/:exerciseId', WorkoutController.getProgress);
 router.get('/saved', WorkoutController.getSavedExercises);
 router.post('/saved', validate(saveExerciseSchema), WorkoutController.saveExercise);
 router.delete('/saved/:exerciseId', WorkoutController.unsaveExercise);
+
+// Playlists
+router.get('/playlists', WorkoutController.getPlaylists);
+router.post('/playlists', validate(createPlaylistSchema), WorkoutController.createPlaylist);
+router.patch('/playlists/:id', validate(updatePlaylistSchema), WorkoutController.updatePlaylist);
+router.delete('/playlists/:id', WorkoutController.deletePlaylist);
+router.post('/playlists/:id/exercises', validate(addPlaylistExercisesSchema), WorkoutController.addPlaylistExercises);
+router.delete('/playlists/:id/exercises/:exerciseId', WorkoutController.removePlaylistExercise);
 
 export default router;

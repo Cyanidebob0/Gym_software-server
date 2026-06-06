@@ -31,3 +31,23 @@ export const saveExerciseSchema = z.object({
     exercise_name: z.string().max(200).optional(),
     image_url: z.string().max(1000).optional(),
 });
+
+export const createPlaylistSchema = z.object({
+    name: z.string().min(1).max(60),
+    color: z.string().max(20).optional(),
+});
+
+export const updatePlaylistSchema = z.object({
+    name: z.string().min(1).max(60).optional(),
+    color: z.string().max(20).optional(),
+}).refine((d) => d.name !== undefined || d.color !== undefined, {
+    message: 'Provide a name or color to update',
+});
+
+export const addPlaylistExercisesSchema = z.object({
+    exercises: z.array(z.object({
+        exercise_id: exerciseIdSchema,
+        exercise_name: z.string().max(200).optional(),
+        image_url: z.string().max(1000).optional(),
+    })).min(1, 'At least one exercise is required'),
+});
