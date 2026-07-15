@@ -1,6 +1,6 @@
 import supabase from '../config/supabase';
 import { get as getSettings } from './settings.service';
-import { computeStatus } from './member-admin.service';
+import { computeStatus } from './member-management.service';
 
 export const getProfileByUserId = async (userId: string) => {
     const { data, error } = await supabase
@@ -11,7 +11,7 @@ export const getProfileByUserId = async (userId: string) => {
 
     if (error || !data) throw new Error('Member profile not found');
 
-    const settings = await getSettings(data.gym_id);
+    const settings = await getSettings();
     const reminderDays = settings.expiry_reminder_days ?? 7;
     const graceDays = settings.grace_period_days ?? 3;
 
@@ -93,7 +93,7 @@ export const updateProfileByUserId = async (userId: string, body: { name?: strin
 export const selfCheckIn = async (userId: string) => {
     const { data: member } = await supabase
         .from('members')
-        .select('id, gym_id, status')
+        .select('id, status')
         .eq('user_id', userId)
         .single();
 
@@ -117,7 +117,7 @@ export const selfCheckIn = async (userId: string) => {
 
     const { data, error } = await supabase
         .from('attendance')
-        .insert({ gym_id: member.gym_id, member_id: member.id, check_in: checkIn, date: today })
+        .insert({ member_id: member.id, check_in: checkIn, date: today })
         .select()
         .single();
 
@@ -182,18 +182,17 @@ export const getTodayCheckIn = async (userId: string) => {
 };
 
 export const getBroadcastsByUserId = async (userId: string) => {
-    const { data: user } = await supabase
-        .from('users')
-        .select('gym_id')
-        .eq('id', userId)
-        .single();
+    const { data: member } = await supabase
+        .from('members')
+        .select('id')
+        .eq('user_id', userId)
+        .maybeSingle();
 
-    if (!user?.gym_id) throw new Error('No gym associated');
+    if (!member) throw new Error('Member not found');
 
     const { data, error } = await supabase
         .from('broadcasts')
         .select('*')
-        .eq('gym_id', user.gym_id)
         .order('sent_at', { ascending: false });
 
     if (error) throw new Error(error.message);

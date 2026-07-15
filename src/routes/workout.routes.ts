@@ -33,7 +33,7 @@ router.use(authenticate, authorize('member', 'owner'));
 // Exercise browsing (cached from ExerciseDB)
 router.get('/exercises', WorkoutController.getExercises);
 router.get('/exercises/filters', WorkoutController.getExerciseFilters);
-router.post('/exercises/refresh', authorize('super_admin'), WorkoutController.refreshExercises);
+router.post('/exercises/refresh', authorize('owner'), WorkoutController.refreshExercises);
 router.get('/exercises/:id', WorkoutController.getExerciseDetail);
 
 // Workout sessions

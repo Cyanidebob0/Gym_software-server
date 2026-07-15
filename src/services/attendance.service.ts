@@ -1,10 +1,9 @@
 import supabase from '../config/supabase';
 
-export const getByDate = async (gymId: string, date: string) => {
+export const getByDate = async (date: string) => {
     const { data, error } = await supabase
         .from('attendance')
         .select('*, members(name)')
-        .eq('gym_id', gymId)
         .eq('date', date)
         .order('check_in', { ascending: false });
 
@@ -16,11 +15,10 @@ export const getByDate = async (gymId: string, date: string) => {
     }));
 };
 
-export const getByMember = async (gymId: string, memberId: string) => {
+export const getByMember = async (memberId: string) => {
     const { data, error } = await supabase
         .from('attendance')
         .select('*')
-        .eq('gym_id', gymId)
         .eq('member_id', memberId)
         .order('date', { ascending: false });
 
@@ -28,13 +26,12 @@ export const getByMember = async (gymId: string, memberId: string) => {
     return data;
 };
 
-export const getTodayStats = async (gymId: string) => {
+export const getTodayStats = async () => {
     const today = new Date().toISOString().split('T')[0];
 
     const { data, error } = await supabase
         .from('attendance')
         .select('id, check_out')
-        .eq('gym_id', gymId)
         .eq('date', today);
 
     if (error) throw new Error(error.message);
@@ -44,12 +41,12 @@ export const getTodayStats = async (gymId: string) => {
     return { total, present };
 };
 
-export const markIn = async (gymId: string, body: { member_id: string; check_in: string; date?: string }) => {
+export const markIn = async (body: { member_id: string; check_in: string; date?: string }) => {
     const date = body.date || new Date().toISOString().split('T')[0];
 
     const { data, error } = await supabase
         .from('attendance')
-        .insert({ gym_id: gymId, member_id: body.member_id, check_in: body.check_in, date })
+        .insert({ member_id: body.member_id, check_in: body.check_in, date })
         .select('*, members(name)')
         .single();
 
@@ -57,12 +54,11 @@ export const markIn = async (gymId: string, body: { member_id: string; check_in:
     return { ...data, member_name: data.members?.name ?? null, members: undefined };
 };
 
-export const markOut = async (gymId: string, attendanceId: string, checkOut: string) => {
+export const markOut = async (attendanceId: string, checkOut: string) => {
     const { data, error } = await supabase
         .from('attendance')
         .update({ check_out: checkOut })
         .eq('id', attendanceId)
-        .eq('gym_id', gymId)
         .select('*, members(name)')
         .single();
 
@@ -70,12 +66,11 @@ export const markOut = async (gymId: string, attendanceId: string, checkOut: str
     return { ...data, member_name: data.members?.name ?? null, members: undefined };
 };
 
-export const remove = async (gymId: string, attendanceId: string) => {
+export const remove = async (attendanceId: string) => {
     const { error } = await supabase
         .from('attendance')
         .delete()
-        .eq('id', attendanceId)
-        .eq('gym_id', gymId);
+        .eq('id', attendanceId);
 
     if (error) throw new Error(error.message);
 };

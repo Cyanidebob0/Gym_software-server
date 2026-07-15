@@ -1,6 +1,6 @@
 import supabase from '../config/supabase';
 
-export const generateInvoiceId = async (gymId: string): Promise<string> => {
+export const generateInvoiceId = async (): Promise<string> => {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -9,18 +9,16 @@ export const generateInvoiceId = async (gymId: string): Promise<string> => {
     const { count, error } = await supabase
         .from('payments')
         .select('*', { count: 'exact', head: true })
-        .eq('gym_id', gymId)
         .like('invoice_id', `${prefix}-%`);
 
     const seq = (error || count === null ? 0 : count) + 1;
     return `${prefix}-${String(seq).padStart(4, '0')}`;
 };
 
-export const getAll = async (gymId: string, limit?: number, offset?: number) => {
+export const getAll = async (limit?: number, offset?: number) => {
     let query = supabase
         .from('payments')
         .select('*, members(name), plans(name)')
-        .eq('gym_id', gymId)
         .order('date', { ascending: false });
 
     if (limit !== undefined) query = query.range(offset || 0, (offset || 0) + limit - 1);
@@ -37,12 +35,11 @@ export const getAll = async (gymId: string, limit?: number, offset?: number) => 
     }));
 };
 
-export const getById = async (gymId: string, paymentId: string) => {
+export const getById = async (paymentId: string) => {
     const { data, error } = await supabase
         .from('payments')
         .select('*, members(name), plans(name)')
         .eq('id', paymentId)
-        .eq('gym_id', gymId)
         .single();
 
     if (error || !data) throw new Error('Payment not found');
@@ -55,11 +52,11 @@ export const getById = async (gymId: string, paymentId: string) => {
     };
 };
 
-export const create = async (gymId: string, body: Record<string, any>) => {
-    const invoice_id = await generateInvoiceId(gymId);
+export const create = async (body: Record<string, any>) => {
+    const invoice_id = await generateInvoiceId();
     const { data, error } = await supabase
         .from('payments')
-        .insert({ ...body, gym_id: gymId, invoice_id })
+        .insert({ ...body, invoice_id })
         .select()
         .single();
 
@@ -67,7 +64,7 @@ export const create = async (gymId: string, body: Record<string, any>) => {
     return data;
 };
 
-export const getStats = async (gymId: string) => {
+export const getStats = async () => {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
@@ -77,14 +74,12 @@ export const getStats = async (gymId: string) => {
         supabase
             .from('payments')
             .select('amount')
-            .eq('gym_id', gymId)
             .eq('status', 'completed')
             .gte('date', startOfMonth)
             .lte('date', endOfMonth),
         supabase
             .from('payments')
             .select('amount')
-            .eq('gym_id', gymId)
             .eq('status', 'completed')
             .gte('date', startOfYear),
     ]);

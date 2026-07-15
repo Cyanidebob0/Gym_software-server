@@ -7,7 +7,7 @@ import * as MemberService from '../services/member.service';
 export const getAll = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { limit, offset } = parsePagination(req);
-        const data = await MemberService.getAll(req.user!.gym_id!, limit, offset);
+        const data = await MemberService.getAll(limit, offset);
         sendSuccess(res, data);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to fetch members';
@@ -17,7 +17,7 @@ export const getAll = async (req: AuthRequest, res: Response): Promise<void> => 
 
 export const getById = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await MemberService.getById(req.user!.gym_id!, req.params.id as string);
+        const data = await MemberService.getById(req.params.id as string);
         sendSuccess(res, data);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to fetch member';
@@ -27,7 +27,7 @@ export const getById = async (req: AuthRequest, res: Response): Promise<void> =>
 
 export const create = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await MemberService.create(req.user!.gym_id!, req.body);
+        const data = await MemberService.create(req.body);
         sendSuccess(res, data, 'Member created', 201);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to create member';
@@ -37,7 +37,7 @@ export const create = async (req: AuthRequest, res: Response): Promise<void> => 
 
 export const update = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await MemberService.update(req.user!.gym_id!, req.params.id as string, req.body);
+        const data = await MemberService.update(req.params.id as string, req.body);
         sendSuccess(res, data, 'Member updated');
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to update member';
@@ -47,7 +47,7 @@ export const update = async (req: AuthRequest, res: Response): Promise<void> => 
 
 export const getStats = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await MemberService.getStats(req.user!.gym_id!);
+        const data = await MemberService.getStats();
         sendSuccess(res, data);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to fetch stats';
@@ -103,7 +103,7 @@ export const approveMember = async (req: AuthRequest, res: Response): Promise<vo
             sendError(res, 'Status must be approved or blocked', 422);
             return;
         }
-        const data = await MemberService.update(req.user!.gym_id!, req.params.id as string, { status });
+        const data = await MemberService.update(req.params.id as string, { status });
         sendSuccess(res, data, `Member ${status}`);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to update member';

@@ -1,36 +1,43 @@
 import supabase from '../config/supabase';
 
-export const get = async (gymId: string) => {
+const DEFAULT_SETTINGS = {
+    gym_name: 'Sweat Zone',
+    gym_address: '',
+    gym_phone: '',
+    expiry_reminder_days: 7,
+    sms_reminders: false,
+    online_registration: true,
+    refunds_enabled: true,
+    grace_period_days: 3,
+};
+
+// Settings is a singleton table for the one Sweat Zone installation.
+export const get = async () => {
     const { data, error } = await supabase
         .from('settings')
         .select('*')
-        .eq('gym_id', gymId)
-        .single();
+        .limit(1)
+        .maybeSingle();
 
-    // If no settings exist yet, return defaults
-    if (error || !data) {
-        return {
-            gym_id: gymId,
-            gym_name: '',
-            gym_address: '',
-            gym_phone: '',
-            expiry_reminder_days: 7,
-            sms_reminders: false,
-            online_registration: true,
-            refunds_enabled: true,
-            grace_period_days: 3,
-        };
-    }
-    return data;
+    if (error) throw new Error(error.message);
+    return data ?? DEFAULT_SETTINGS;
 };
 
-export const upsert = async (gymId: string, body: Record<string, any>) => {
-    const { data, error } = await supabase
+export const upsert = async (body: Record<string, any>) => {
+    const { data: existing, error: readError } = await supabase
         .from('settings')
-        .upsert({ ...body, gym_id: gymId }, { onConflict: 'gym_id' })
-        .select()
-        .single();
+        .select('id')
+        .limit(1)
+        .maybeSingle();
 
+    if (readError) throw new Error(readError.message);
+
+    const payload = { ...body, gym_name: 'Sweat Zone' };
+    const query = existing
+        ? supabase.from('settings').update(payload).eq('id', existing.id)
+        : supabase.from('settings').insert(payload);
+
+    const { data, error } = await query.select().single();
     if (error) throw new Error(error.message);
     return data;
 };

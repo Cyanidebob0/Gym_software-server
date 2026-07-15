@@ -18,8 +18,7 @@ export const sync = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { id, email } = req.user!;
         const name = req.body.name as string | undefined;
-        const requestedRole = req.body.role as string | undefined;
-        const { user, changed } = await AuthService.syncUser(id, email, name, requestedRole);
+        const { user, changed } = await AuthService.syncUser(id, email, name);
         if (changed) invalidateAuthCacheForUser(id);
         sendSuccess(res, user, 'User synced');
     } catch (err: unknown) {
@@ -40,18 +39,10 @@ export const checkProvider = async (req: Request, res: Response): Promise<void> 
     }
 };
 
-export const linkPassword = async (req: Request, res: Response): Promise<void> => {
+export const linkPassword = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const { email, password } = req.body;
-        if (!email || !password) {
-            sendError(res, 'Email and password are required', 400);
-            return;
-        }
-        if (password.length < 6) {
-            sendError(res, 'Password must be at least 6 characters', 400);
-            return;
-        }
-        await AuthService.linkPassword(email, password);
+        const { password } = req.body;
+        await AuthService.linkPassword(req.user!.id, password);
         sendSuccess(res, null, 'Password linked successfully');
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to link password';

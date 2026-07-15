@@ -11,7 +11,6 @@ interface CachedAuth {
     id: string;
     email: string;
     role: UserRole;
-    gym_id?: string;
     expiry: number;
 }
 
@@ -47,7 +46,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     // Check cache first — avoids slow remote getUser() call
     const cached = authCache.get(token);
     if (cached && cached.expiry > Date.now()) {
-        req.user = { id: cached.id, email: cached.email, role: cached.role, gym_id: cached.gym_id };
+        req.user = { id: cached.id, email: cached.email, role: cached.role };
         return next();
     }
 
@@ -60,15 +59,15 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
         return;
     }
 
-    // Fetch user profile (role + gym_id)
+    // Fetch the application role. Sweat Zone is a single-gym system, so
+    // authenticated users no longer carry tenant identifiers.
     const { data: profile } = await supabase
         .from('users')
-        .select('role, gym_id')
+        .select('role')
         .eq('id', user.id)
         .single();
 
     const role = (profile?.role ?? 'member') as UserRole;
-    const gymId = profile?.gym_id ?? undefined;
 
     // Only cache once a real profile row exists. Otherwise a request that
     // races ahead of /auth/sync would pin role='member' for 5 minutes
@@ -78,7 +77,6 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
             id: user.id,
             email: user.email ?? '',
             role,
-            gym_id: gymId,
             expiry: Date.now() + CACHE_TTL_MS,
         });
     }
@@ -87,7 +85,6 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
         id: user.id,
         email: user.email ?? '',
         role,
-        gym_id: gymId,
     };
 
     next();

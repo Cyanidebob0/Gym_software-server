@@ -1,10 +1,9 @@
 import supabase from '../config/supabase';
 
-export const getAll = async (gymId: string) => {
+export const getAll = async () => {
     const { data, error } = await supabase
         .from('refunds')
         .select('*, members(name), payments(invoice_id)')
-        .eq('gym_id', gymId)
         .order('created_at', { ascending: false });
 
     if (error) throw new Error(error.message);
@@ -17,11 +16,10 @@ export const getAll = async (gymId: string) => {
     }));
 };
 
-export const create = async (gymId: string, body: Record<string, any>) => {
+export const create = async (body: Record<string, any>) => {
     const { data, error } = await supabase
         .from('refunds')
         .insert({
-            gym_id: gymId,
             member_id: body.member_id,
             payment_id: body.payment_id,
             amount: body.amount,
@@ -34,7 +32,7 @@ export const create = async (gymId: string, body: Record<string, any>) => {
     return data;
 };
 
-export const updateStatus = async (gymId: string, refundId: string, status: 'approved' | 'rejected') => {
+export const updateStatus = async (refundId: string, status: 'approved' | 'rejected') => {
     const updateData: Record<string, any> = { status };
     if (status === 'approved' || status === 'rejected') {
         updateData.resolved_date = new Date().toISOString().split('T')[0];
@@ -44,7 +42,6 @@ export const updateStatus = async (gymId: string, refundId: string, status: 'app
         .from('refunds')
         .update(updateData)
         .eq('id', refundId)
-        .eq('gym_id', gymId)
         .select()
         .single();
 

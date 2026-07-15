@@ -7,7 +7,7 @@ import * as PaymentService from '../services/payment.service';
 export const getAll = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { limit, offset } = parsePagination(req);
-        const data = await PaymentService.getAll(req.user!.gym_id!, limit, offset);
+        const data = await PaymentService.getAll(limit, offset);
         sendSuccess(res, data);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to fetch payments';
@@ -17,7 +17,7 @@ export const getAll = async (req: AuthRequest, res: Response): Promise<void> => 
 
 export const getById = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await PaymentService.getById(req.user!.gym_id!, req.params.id as string);
+        const data = await PaymentService.getById(req.params.id as string);
         sendSuccess(res, data);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to fetch payment';
@@ -27,7 +27,7 @@ export const getById = async (req: AuthRequest, res: Response): Promise<void> =>
 
 export const create = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await PaymentService.create(req.user!.gym_id!, req.body);
+        const data = await PaymentService.create(req.body);
         sendSuccess(res, data, 'Payment created', 201);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to create payment';
@@ -37,7 +37,7 @@ export const create = async (req: AuthRequest, res: Response): Promise<void> => 
 
 export const getStats = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await PaymentService.getStats(req.user!.gym_id!);
+        const data = await PaymentService.getStats();
         sendSuccess(res, data);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to fetch payment stats';

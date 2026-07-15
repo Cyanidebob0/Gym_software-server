@@ -1,10 +1,10 @@
 import supabase from '../config/supabase';
-import { getStats as getMemberStats, getAll as getAllMembers } from './member-admin.service';
+import { getStats as getMemberStats, getAll as getAllMembers } from './member-management.service';
 import { getStats as getPaymentStats } from './payment.service';
 import { getTodayStats } from './attendance.service';
 
 // Revenue per month for last 6 months
-export const getMonthlyRevenue = async (gymId: string) => {
+export const getMonthlyRevenue = async () => {
     const months: { label: string; value: number }[] = [];
     const now = new Date();
 
@@ -17,7 +17,6 @@ export const getMonthlyRevenue = async (gymId: string) => {
         const { data } = await supabase
             .from('payments')
             .select('amount')
-            .eq('gym_id', gymId)
             .eq('status', 'completed')
             .gte('date', start)
             .lte('date', end);
@@ -29,7 +28,7 @@ export const getMonthlyRevenue = async (gymId: string) => {
 };
 
 // Revenue % change: this month vs last month
-export const getRevenueChange = async (gymId: string) => {
+export const getRevenueChange = async () => {
     const now = new Date();
     const thisStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
     const thisEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
@@ -37,8 +36,8 @@ export const getRevenueChange = async (gymId: string) => {
     const lastEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
 
     const [{ data: thisData }, { data: lastData }] = await Promise.all([
-        supabase.from('payments').select('amount').eq('gym_id', gymId).eq('status', 'completed').gte('date', thisStart).lte('date', thisEnd),
-        supabase.from('payments').select('amount').eq('gym_id', gymId).eq('status', 'completed').gte('date', lastStart).lte('date', lastEnd),
+        supabase.from('payments').select('amount').eq('status', 'completed').gte('date', thisStart).lte('date', thisEnd),
+        supabase.from('payments').select('amount').eq('status', 'completed').gte('date', lastStart).lte('date', lastEnd),
     ]);
 
     const thisTotal = (thisData || []).reduce((s: number, p: any) => s + Number(p.amount), 0);
@@ -50,7 +49,7 @@ export const getRevenueChange = async (gymId: string) => {
 };
 
 // Weekly attendance: daily check-ins for current week (Mon-Sun)
-export const getWeeklyAttendance = async (gymId: string) => {
+export const getWeeklyAttendance = async () => {
     const now = new Date();
     const dayOfWeek = now.getDay(); // 0=Sun
     const monday = new Date(now);
@@ -67,7 +66,6 @@ export const getWeeklyAttendance = async (gymId: string) => {
         const { data } = await supabase
             .from('attendance')
             .select('id')
-            .eq('gym_id', gymId)
             .eq('date', dateStr);
 
         result.push({ label: days[i], value: (data || []).length });
@@ -76,7 +74,7 @@ export const getWeeklyAttendance = async (gymId: string) => {
 };
 
 // Member growth: cumulative total at end of each of last 6 months
-export const getMemberGrowth = async (gymId: string) => {
+export const getMemberGrowth = async () => {
     const months: { label: string; value: number }[] = [];
     const now = new Date();
 
@@ -89,7 +87,6 @@ export const getMemberGrowth = async (gymId: string) => {
         const { data } = await supabase
             .from('members')
             .select('id')
-            .eq('gym_id', gymId)
             .lte('join_date', endDate);
 
         months.push({ label, value: (data || []).length });
@@ -98,7 +95,7 @@ export const getMemberGrowth = async (gymId: string) => {
 };
 
 // Full dashboard payload — single endpoint for the entire owner dashboard page
-export const getDashboard = async (gymId: string) => {
+export const getDashboard = async () => {
     const [
         monthlyRevenue,
         revenueChange,
@@ -109,14 +106,14 @@ export const getDashboard = async (gymId: string) => {
         todayAttendance,
         members,
     ] = await Promise.all([
-        getMonthlyRevenue(gymId),
-        getRevenueChange(gymId),
-        getWeeklyAttendance(gymId),
-        getMemberGrowth(gymId),
-        getMemberStats(gymId),
-        getPaymentStats(gymId),
-        getTodayStats(gymId),
-        getAllMembers(gymId, 50, 0),
+        getMonthlyRevenue(),
+        getRevenueChange(),
+        getWeeklyAttendance(),
+        getMemberGrowth(),
+        getMemberStats(),
+        getPaymentStats(),
+        getTodayStats(),
+        getAllMembers(50, 0),
     ]);
 
     return {

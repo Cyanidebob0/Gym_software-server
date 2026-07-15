@@ -7,7 +7,7 @@ import * as BroadcastService from '../services/broadcast.service';
 export const getAll = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { limit, offset } = parsePagination(req);
-        const data = await BroadcastService.getAll(req.user!.gym_id!, limit, offset);
+        const data = await BroadcastService.getAll(limit, offset);
         sendSuccess(res, data);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to fetch broadcasts';
@@ -17,7 +17,7 @@ export const getAll = async (req: AuthRequest, res: Response): Promise<void> => 
 
 export const send = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await BroadcastService.send(req.user!.gym_id!, req.user!.id, req.body);
+        const data = await BroadcastService.send(req.user!.id, req.body);
         sendSuccess(res, data, 'Broadcast sent', 201);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to send broadcast';
@@ -27,7 +27,7 @@ export const send = async (req: AuthRequest, res: Response): Promise<void> => {
 
 export const update = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await BroadcastService.update(req.user!.gym_id!, req.params.id as string, req.body);
+        const data = await BroadcastService.update(req.params.id as string, req.body);
         sendSuccess(res, data, 'Broadcast updated');
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to update broadcast';
@@ -37,7 +37,7 @@ export const update = async (req: AuthRequest, res: Response): Promise<void> => 
 
 export const remove = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        await BroadcastService.remove(req.user!.gym_id!, req.params.id as string);
+        await BroadcastService.remove(req.params.id as string);
         sendSuccess(res, null, 'Broadcast deleted');
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to delete broadcast';

@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { me, sync, linkPassword, checkProvider } from '../controllers/auth.controller';
 import { authenticate } from '../middleware/auth.middleware';
+import { validate } from '../middleware/validate.middleware';
+import { linkPasswordSchema } from '../validators/auth.validator';
 
 const router = Router();
 
@@ -14,7 +16,8 @@ router.post('/sync', authenticate, sync);
 // Check if email exists as OAuth-only account
 router.post('/check-provider', checkProvider);
 
-// Link a password to an existing OAuth-only account
-router.post('/link-password', linkPassword);
+// Link a password only after the user has proved ownership by signing in.
+// The account id comes from the verified bearer token, never from the body.
+router.post('/link-password', authenticate, validate(linkPasswordSchema), linkPassword);
 
 export default router;

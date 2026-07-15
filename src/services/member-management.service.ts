@@ -26,18 +26,17 @@ const computeStatus = (
 
 export { computeStatus };
 
-export const getAll = async (gymId: string, limit?: number, offset?: number) => {
+export const getAll = async (limit?: number, offset?: number) => {
     let query = supabase
         .from('members')
         .select('*, plans(name)')
-        .eq('gym_id', gymId)
         .order('created_at', { ascending: false });
 
     if (limit !== undefined) query = query.range(offset || 0, (offset || 0) + limit - 1);
 
     const [{ data, error }, settings] = await Promise.all([
         query,
-        getSettings(gymId),
+        getSettings(),
     ]);
 
     if (error) throw new Error(error.message);
@@ -53,15 +52,14 @@ export const getAll = async (gymId: string, limit?: number, offset?: number) => 
     }));
 };
 
-export const getById = async (gymId: string, memberId: string) => {
+export const getById = async (memberId: string) => {
     const [{ data, error }, settings] = await Promise.all([
         supabase
             .from('members')
             .select('*, plans(name, duration_days, price)')
             .eq('id', memberId)
-            .eq('gym_id', gymId)
             .single(),
-        getSettings(gymId),
+        getSettings(),
     ]);
 
     if (error || !data) throw new Error('Member not found');
@@ -77,10 +75,10 @@ export const getById = async (gymId: string, memberId: string) => {
     };
 };
 
-export const create = async (gymId: string, body: Record<string, any>) => {
+export const create = async (body: Record<string, any>) => {
     const { data, error } = await supabase
         .from('members')
-        .insert({ ...body, gym_id: gymId })
+        .insert(body)
         .select()
         .single();
 
@@ -88,12 +86,11 @@ export const create = async (gymId: string, body: Record<string, any>) => {
     return data;
 };
 
-export const update = async (gymId: string, memberId: string, body: Record<string, any>) => {
+export const update = async (memberId: string, body: Record<string, any>) => {
     const { data, error } = await supabase
         .from('members')
         .update(body)
         .eq('id', memberId)
-        .eq('gym_id', gymId)
         .select()
         .single();
 
@@ -101,13 +98,12 @@ export const update = async (gymId: string, memberId: string, body: Record<strin
     return data;
 };
 
-export const getStats = async (gymId: string) => {
+export const getStats = async () => {
     const [{ data, error }, settings] = await Promise.all([
         supabase
             .from('members')
-            .select('status, expiry_date')
-            .eq('gym_id', gymId),
-        getSettings(gymId),
+            .select('status, expiry_date'),
+        getSettings(),
     ]);
 
     if (error) throw new Error(error.message);

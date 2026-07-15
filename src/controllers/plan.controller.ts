@@ -5,7 +5,7 @@ import * as PlanService from '../services/plan.service';
 
 export const getAll = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await PlanService.getAll(req.user!.gym_id!);
+        const data = await PlanService.getAll();
         sendSuccess(res, data);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to fetch plans';
@@ -15,7 +15,7 @@ export const getAll = async (req: AuthRequest, res: Response): Promise<void> => 
 
 export const getActive = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await PlanService.getActive(req.user!.gym_id!);
+        const data = await PlanService.getActive();
         sendSuccess(res, data);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to fetch active plans';
@@ -25,7 +25,7 @@ export const getActive = async (req: AuthRequest, res: Response): Promise<void> 
 
 export const getById = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await PlanService.getById(req.user!.gym_id!, req.params.id as string);
+        const data = await PlanService.getById(req.params.id as string);
         sendSuccess(res, data);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to fetch plan';
@@ -35,7 +35,7 @@ export const getById = async (req: AuthRequest, res: Response): Promise<void> =>
 
 export const create = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await PlanService.create(req.user!.gym_id!, req.body);
+        const data = await PlanService.create(req.body);
         sendSuccess(res, data, 'Plan created', 201);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to create plan';
@@ -45,7 +45,7 @@ export const create = async (req: AuthRequest, res: Response): Promise<void> => 
 
 export const update = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await PlanService.update(req.user!.gym_id!, req.params.id as string, req.body);
+        const data = await PlanService.update(req.params.id as string, req.body);
         sendSuccess(res, data, 'Plan updated');
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to update plan';
@@ -55,7 +55,7 @@ export const update = async (req: AuthRequest, res: Response): Promise<void> => 
 
 export const toggle = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await PlanService.toggle(req.user!.gym_id!, req.params.id as string);
+        const data = await PlanService.toggle(req.params.id as string);
         sendSuccess(res, data, 'Plan toggled');
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to toggle plan';

@@ -5,7 +5,7 @@ import * as SettingsService from '../services/settings.service';
 
 export const get = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await SettingsService.get(req.user!.gym_id!);
+        const data = await SettingsService.get();
         sendSuccess(res, data);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to fetch settings';
@@ -15,7 +15,7 @@ export const get = async (req: AuthRequest, res: Response): Promise<void> => {
 
 export const update = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await SettingsService.upsert(req.user!.gym_id!, req.body);
+        const data = await SettingsService.upsert(req.body);
         sendSuccess(res, data, 'Settings updated');
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to update settings';

@@ -13,47 +13,23 @@ export const getStatusByUserId = async (userId: string) => {
 };
 
 export const selfRegister = async (userId: string, body: Record<string, any>) => {
-    const { data: gyms, error: gymError } = await supabase
-        .from('gyms')
-        .select('id')
-        .order('created_at', { ascending: true })
-        .limit(1);
-
-    if (gymError || !gyms?.length) throw new Error('No gym found');
-    const gymId = gyms[0].id;
-
     const existing = await getStatusByUserId(userId);
     if (existing) throw new Error('Already registered');
 
     const { data, error } = await supabase
         .from('members')
-        .insert({ ...body, gym_id: gymId, user_id: userId, status: 'pending' })
+        .insert({ ...body, user_id: userId, status: 'pending' })
         .select()
         .single();
 
     if (error) throw new Error(error.message);
-
-    await supabase
-        .from('users')
-        .update({ gym_id: gymId })
-        .eq('id', userId);
-
     return data;
 };
 
-export const getActivePlansByUserId = async (userId: string) => {
-    const { data: user } = await supabase
-        .from('users')
-        .select('gym_id')
-        .eq('id', userId)
-        .single();
-
-    if (!user?.gym_id) throw new Error('No gym associated');
-
+export const getActivePlansByUserId = async (_userId: string) => {
     const { data, error } = await supabase
         .from('plans')
         .select('*')
-        .eq('gym_id', user.gym_id)
         .eq('is_active', true)
         .order('price', { ascending: true });
 
@@ -64,7 +40,7 @@ export const getActivePlansByUserId = async (userId: string) => {
 export const activateWithPayment = async (userId: string, body: { plan_id: string; method: string; amount: number }) => {
     const { data: member } = await supabase
         .from('members')
-        .select('id, gym_id, status')
+        .select('id, status')
         .eq('user_id', userId)
         .single();
 
@@ -75,7 +51,6 @@ export const activateWithPayment = async (userId: string, body: { plan_id: strin
         .from('plans')
         .select('*')
         .eq('id', body.plan_id)
-        .eq('gym_id', member.gym_id)
         .single();
 
     if (!plan) throw new Error('Plan not found');
@@ -110,11 +85,10 @@ export const activateWithPayment = async (userId: string, body: { plan_id: strin
         },
         {
             execute: async () => {
-                const invoice_id = await generateInvoiceId(member.gym_id);
+                const invoice_id = await generateInvoiceId();
                 const { error } = await supabase
                     .from('payments')
                     .insert({
-                        gym_id: member.gym_id,
                         member_id: member.id,
                         plan_id: body.plan_id,
                         amount: body.amount,
