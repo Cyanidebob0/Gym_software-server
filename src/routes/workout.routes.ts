@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
+import rateLimit from 'express-rate-limit';
 import { authenticate } from '../middleware/auth.middleware';
 import { authorize } from '../middleware/role.middleware';
 import { validate } from '../middleware/validate.middleware';
@@ -18,14 +19,22 @@ const router = Router();
 const photoUpload = multer({
     storage: multer.memoryStorage(),
     limits: {
-        fileSize: 10 * 1024 * 1024, // 10 MB per file
-        files: 8,
+        fileSize: 5 * 1024 * 1024,
+        files: 4,
     },
     fileFilter: (_req, file, cb) => {
         const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
         if (allowed.includes(file.mimetype)) cb(null, true);
         else cb(new Error(`Unsupported file type: ${file.mimetype}`));
     },
+});
+
+const photoUploadRateLimit = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: 'Too many photo uploads. Please try again later.' },
 });
 
 router.use(authenticate, authorize('member', 'owner'));
@@ -41,7 +50,7 @@ router.get('/sessions', WorkoutController.getSessions);
 router.get('/sessions/:id', WorkoutController.getSession);
 router.post('/sessions', validate(createSessionSchema), WorkoutController.createSession);
 router.patch('/sessions/:id', validate(updateSessionSchema), WorkoutController.updateSession);
-router.post('/sessions/:id/photos', photoUpload.array('photos', 8), WorkoutController.uploadSessionPhotos);
+router.post('/sessions/:id/photos', photoUploadRateLimit, photoUpload.array('photos', 4), WorkoutController.uploadSessionPhotos);
 router.delete('/sessions/:id', WorkoutController.deleteSession);
 
 // Progress

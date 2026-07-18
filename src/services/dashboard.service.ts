@@ -3,111 +3,92 @@ import { getStats as getMemberStats, getAll as getAllMembers } from './member-ma
 import { getStats as getPaymentStats } from './payment.service';
 import { getTodayStats } from './attendance.service';
 
-// Revenue per month for last 6 months
+const isoDate = (date: Date) => date.toISOString().split('T')[0];
+
+const monthBuckets = () => {
+    const now = new Date();
+    return Array.from({ length: 6 }, (_, index) => {
+        const month = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+        return {
+            key: `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`,
+            label: month.toLocaleString('en-US', { month: 'short' }),
+            value: 0,
+        };
+    });
+};
+
 export const getMonthlyRevenue = async () => {
-    const months: { label: string; value: number }[] = [];
+    const buckets = monthBuckets();
+    const first = new Date(`${buckets[0].key}-01T00:00:00`);
     const now = new Date();
+    const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const { data, error } = await supabase
+        .from('payments')
+        .select('amount, date')
+        .eq('status', 'completed')
+        .gte('date', isoDate(first))
+        .lte('date', isoDate(last));
 
-    for (let i = 5; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const start = d.toISOString().split('T')[0];
-        const end = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
-        const label = d.toLocaleString('en-US', { month: 'short' });
-
-        const { data } = await supabase
-            .from('payments')
-            .select('amount')
-            .eq('status', 'completed')
-            .gte('date', start)
-            .lte('date', end);
-
-        const total = (data || []).reduce((s: number, p: any) => s + Number(p.amount), 0);
-        months.push({ label, value: total });
+    if (error) throw new Error(error.message);
+    const byMonth = new Map(buckets.map((bucket) => [bucket.key, bucket]));
+    for (const payment of data ?? []) {
+        const bucket = byMonth.get(String(payment.date).slice(0, 7));
+        if (bucket) bucket.value += Number(payment.amount) || 0;
     }
-    return months;
+    return buckets.map(({ label, value }) => ({ label, value }));
 };
 
-// Revenue % change: this month vs last month
-export const getRevenueChange = async () => {
-    const now = new Date();
-    const thisStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    const thisEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-    const lastStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
-    const lastEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
-
-    const [{ data: thisData }, { data: lastData }] = await Promise.all([
-        supabase.from('payments').select('amount').eq('status', 'completed').gte('date', thisStart).lte('date', thisEnd),
-        supabase.from('payments').select('amount').eq('status', 'completed').gte('date', lastStart).lte('date', lastEnd),
-    ]);
-
-    const thisTotal = (thisData || []).reduce((s: number, p: any) => s + Number(p.amount), 0);
-    const lastTotal = (lastData || []).reduce((s: number, p: any) => s + Number(p.amount), 0);
-
-    if (lastTotal === 0) return { change: thisTotal > 0 ? 100 : 0, direction: 'up' as const };
-    const pct = Math.round(((thisTotal - lastTotal) / lastTotal) * 100);
-    return { change: Math.abs(pct), direction: pct >= 0 ? 'up' as const : 'down' as const };
-};
-
-// Weekly attendance: daily check-ins for current week (Mon-Sun)
 export const getWeeklyAttendance = async () => {
     const now = new Date();
-    const dayOfWeek = now.getDay(); // 0=Sun
     const monday = new Date(now);
-    monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    const day = now.getDay();
+    monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
 
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const result: { label: string; value: number }[] = [];
+    const { data, error } = await supabase
+        .from('attendance')
+        .select('date')
+        .gte('date', isoDate(monday))
+        .lte('date', isoDate(sunday));
+    if (error) throw new Error(error.message);
 
-    for (let i = 0; i < 7; i++) {
-        const d = new Date(monday);
-        d.setDate(monday.getDate() + i);
-        const dateStr = d.toISOString().split('T')[0];
-
-        const { data } = await supabase
-            .from('attendance')
-            .select('id')
-            .eq('date', dateStr);
-
-        result.push({ label: days[i], value: (data || []).length });
+    const counts = new Map<string, number>();
+    for (const record of data ?? []) {
+        counts.set(record.date, (counts.get(record.date) ?? 0) + 1);
     }
-    return result;
+    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return labels.map((label, index) => {
+        const date = new Date(monday);
+        date.setDate(monday.getDate() + index);
+        return { label, value: counts.get(isoDate(date)) ?? 0 };
+    });
 };
 
-// Member growth: cumulative total at end of each of last 6 months
 export const getMemberGrowth = async () => {
-    const months: { label: string; value: number }[] = [];
     const now = new Date();
+    const starts = Array.from({ length: 6 }, (_, index) =>
+        new Date(now.getFullYear(), now.getMonth() - (5 - index), 1));
+    const finalEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const { data, error } = await supabase
+        .from('members')
+        .select('join_date')
+        .not('join_date', 'is', null)
+        .lte('join_date', isoDate(finalEnd));
+    if (error) throw new Error(error.message);
 
-    for (let i = 5; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i + 1, 0); // last day of month
-        const endDate = d.toISOString().split('T')[0];
-        const label = new Date(now.getFullYear(), now.getMonth() - i, 1)
-            .toLocaleString('en-US', { month: 'short' });
-
-        const { data } = await supabase
-            .from('members')
-            .select('id')
-            .lte('join_date', endDate);
-
-        months.push({ label, value: (data || []).length });
-    }
-    return months;
+    return starts.map((start) => {
+        const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+        return {
+            label: start.toLocaleString('en-US', { month: 'short' }),
+            value: (data ?? []).filter((member) => member.join_date <= isoDate(end)).length,
+        };
+    });
 };
 
-// Full dashboard payload — single endpoint for the entire owner dashboard page
 export const getDashboard = async () => {
-    const [
-        monthlyRevenue,
-        revenueChange,
-        weeklyAttendance,
-        memberGrowth,
-        memberStats,
-        paymentStats,
-        todayAttendance,
-        members,
-    ] = await Promise.all([
+    const [monthlyRevenue, weeklyAttendance, memberGrowth, memberStats, paymentStats, todayAttendance, members] = await Promise.all([
         getMonthlyRevenue(),
-        getRevenueChange(),
         getWeeklyAttendance(),
         getMemberGrowth(),
         getMemberStats(),
@@ -116,9 +97,15 @@ export const getDashboard = async () => {
         getAllMembers(50, 0),
     ]);
 
+    const currentRevenue = monthlyRevenue[monthlyRevenue.length - 1]?.value ?? 0;
+    const previousRevenue = monthlyRevenue[monthlyRevenue.length - 2]?.value ?? 0;
+    const percent = previousRevenue === 0
+        ? (currentRevenue > 0 ? 100 : 0)
+        : Math.round(((currentRevenue - previousRevenue) / previousRevenue) * 100);
+
     return {
         monthly_revenue: monthlyRevenue,
-        revenue_change: revenueChange,
+        revenue_change: { change: Math.abs(percent), direction: percent >= 0 ? 'up' : 'down' },
         weekly_attendance: weeklyAttendance,
         member_growth: memberGrowth,
         member_stats: memberStats,

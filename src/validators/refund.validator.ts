@@ -1,10 +1,9 @@
 import { z } from 'zod';
 
 export const createRefundSchema = z.object({
-    member_id: z.string().uuid('Invalid member ID'),
     payment_id: z.string().uuid('Invalid payment ID'),
-    amount: z.number().nonnegative('Amount must be non-negative'),
-    reason: z.string().optional(),
+    amount: z.number().finite().positive('Amount must be greater than zero'),
+    reason: z.string().trim().min(3, 'Reason must be at least 3 characters').max(500),
 });
 
 export const updateRefundSchema = z.object({

@@ -57,14 +57,6 @@ export const syncUser = async (
     return { user: data, changed: true };
 };
 
-export const checkProvider = async (email: string): Promise<{ exists: boolean; isOAuth: boolean }> => {
-    const { data, error } = await supabase.rpc('check_email_provider', {
-        lookup_email: email,
-    });
-    if (error || !data) return { exists: false, isOAuth: false };
-    return { exists: data.exists, isOAuth: data.is_oauth };
-};
-
 // Link a password only to the currently authenticated Google account.
 export const linkPassword = async (userId: string, password: string): Promise<void> => {
     const { data, error: userError } = await supabase.auth.admin.getUserById(userId);

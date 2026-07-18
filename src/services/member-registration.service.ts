@@ -1,6 +1,7 @@
 import supabase from '../config/supabase';
 import { generateInvoiceId } from './payment.service';
 import { runSteps } from '../utils/transaction';
+import { get as getSettings } from './settings.service';
 
 export const getStatusByUserId = async (userId: string) => {
     const { data } = await supabase
@@ -13,6 +14,9 @@ export const getStatusByUserId = async (userId: string) => {
 };
 
 export const selfRegister = async (userId: string, body: Record<string, any>) => {
+    const settings = await getSettings();
+    if (!settings.online_registration) throw new Error('Online registration is currently disabled');
+
     const existing = await getStatusByUserId(userId);
     if (existing) throw new Error('Already registered');
 

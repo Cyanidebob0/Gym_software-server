@@ -19,6 +19,39 @@ type ExerciseQueryOptions = {
     offset?: number;
 };
 
+const PHOTO_BUCKET = 'workout-photos';
+const ALLOWED_PHOTO_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const MAX_PHOTO_SIZE = 5 * 1024 * 1024;
+const MAX_PHOTOS_PER_SESSION = 4;
+const SIGNED_URL_TTL_SECONDS = 60 * 60;
+
+const photoPath = (value: unknown): string | null => {
+    if (typeof value !== 'string' || !value) return null;
+    if (!/^https?:\/\//i.test(value)) return value;
+    const marker = `/${PHOTO_BUCKET}/`;
+    const markerIndex = value.indexOf(marker);
+    if (markerIndex === -1) return null;
+    return decodeURIComponent(value.slice(markerIndex + marker.length).split('?')[0]);
+};
+
+const signPhotoPaths = async (values: unknown): Promise<string[]> => {
+    const paths = (Array.isArray(values) ? values : [])
+        .map(photoPath)
+        .filter((path): path is string => Boolean(path));
+    const signed = await Promise.all(paths.map(async (path) => {
+        const { data, error } = await supabase.storage
+            .from(PHOTO_BUCKET)
+            .createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
+        return error ? null : data.signedUrl;
+    }));
+    return signed.filter((url): url is string => Boolean(url));
+};
+
+const withSignedPhotos = async <T extends Record<string, any>>(session: T): Promise<T> => ({
+    ...session,
+    image_urls: await signPhotoPaths(session.image_urls),
+});
+
 const getMemberId = async (userId: string): Promise<string> => {
     const { data } = await supabase
         .from('members')
@@ -69,7 +102,7 @@ export const getSessions = async (userId: string, limit = 20, offset = 0) => {
         .range(offset, offset + limit - 1);
 
     if (error) throw new Error(error.message);
-    return data;
+    return Promise.all((data ?? []).map((session: any) => withSignedPhotos(session)));
 };
 
 export const getSession = async (userId: string, sessionId: string) => {
@@ -83,7 +116,7 @@ export const getSession = async (userId: string, sessionId: string) => {
         .single();
 
     if (error || !data) throw new Error('Session not found');
-    return data;
+    return withSignedPhotos(data);
 };
 
 export const createSession = async (userId: string, body: any) => {
@@ -139,11 +172,6 @@ export const updateSession = async (userId: string, sessionId: string, body: any
     return data;
 };
 
-const PHOTO_BUCKET = 'workout-photos';
-const ALLOWED_PHOTO_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
-const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
-const MAX_PHOTOS_PER_SESSION = 8;
-
 const extFor = (mime: string): string => {
     if (mime === 'image/jpeg') return 'jpg';
     if (mime === 'image/png') return 'png';
@@ -169,21 +197,23 @@ export const uploadSessionPhotos = async (
 
     if (fetchErr || !session) throw new Error('Session not found');
 
-    const existing: string[] = Array.isArray((session as any).image_urls) ? (session as any).image_urls : [];
+    const existing = (Array.isArray((session as any).image_urls) ? (session as any).image_urls : [])
+        .map(photoPath)
+        .filter((path: string | null): path is string => Boolean(path));
     const remainingSlots = MAX_PHOTOS_PER_SESSION - existing.length;
     if (remainingSlots <= 0) {
         throw new Error(`Session already has the maximum of ${MAX_PHOTOS_PER_SESSION} photos`);
     }
 
     const accepted = files.slice(0, remainingSlots);
-    const newUrls: string[] = [];
+    const newPaths: string[] = [];
 
     for (const file of accepted) {
         if (!ALLOWED_PHOTO_MIME.has(file.mimetype)) {
             throw new Error(`Unsupported file type: ${file.mimetype}`);
         }
         if (file.size > MAX_PHOTO_SIZE) {
-            throw new Error('File exceeds the 10 MB limit');
+            throw new Error('File exceeds the 5 MB limit');
         }
 
         const ext = extFor(file.mimetype);
@@ -198,24 +228,33 @@ export const uploadSessionPhotos = async (
             });
         if (uploadErr) throw new Error(uploadErr.message);
 
-        const { data: urlData } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path);
-        newUrls.push(urlData.publicUrl);
+        newPaths.push(path);
     }
 
-    const merged = [...existing, ...newUrls];
+    const merged = [...existing, ...newPaths];
 
     const { error: updateErr } = await supabase
         .from('workout_sessions')
         .update({ image_urls: merged })
         .eq('id', sessionId)
         .eq('member_id', memberId);
-    if (updateErr) throw new Error(updateErr.message);
+    if (updateErr) {
+        if (newPaths.length > 0) await supabase.storage.from(PHOTO_BUCKET).remove(newPaths);
+        throw new Error(updateErr.message);
+    }
 
-    return merged;
+    return signPhotoPaths(merged);
 };
 
 export const deleteSession = async (userId: string, sessionId: string) => {
     const memberId = await getMemberId(userId);
+
+    const { data: session } = await supabase
+        .from('workout_sessions')
+        .select('image_urls')
+        .eq('id', sessionId)
+        .eq('member_id', memberId)
+        .maybeSingle();
 
     const { error } = await supabase
         .from('workout_sessions')
@@ -224,6 +263,11 @@ export const deleteSession = async (userId: string, sessionId: string) => {
         .eq('member_id', memberId);
 
     if (error) throw new Error(error.message);
+
+    const paths = (Array.isArray(session?.image_urls) ? session.image_urls : [])
+        .map(photoPath)
+        .filter((path: string | null): path is string => Boolean(path));
+    if (paths.length > 0) await supabase.storage.from(PHOTO_BUCKET).remove(paths);
 };
 
 export const getProgress = async (userId: string, exerciseId: ExerciseId) => {

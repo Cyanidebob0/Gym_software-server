@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { sendSuccess, sendError } from '../utils/response';
 import { AuthRequest } from '../types/express.d';
 import * as AuthService from '../services/auth.service';
@@ -23,18 +23,6 @@ export const sync = async (req: AuthRequest, res: Response): Promise<void> => {
         sendSuccess(res, user, 'User synced');
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to sync user';
-        sendError(res, message, 400);
-    }
-};
-
-export const checkProvider = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { email } = req.body;
-        if (!email) { sendError(res, 'Email is required', 400); return; }
-        const result = await AuthService.checkProvider(email);
-        sendSuccess(res, result);
-    } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Check failed';
         sendError(res, message, 400);
     }
 };

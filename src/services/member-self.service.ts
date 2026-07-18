@@ -184,7 +184,7 @@ export const getTodayCheckIn = async (userId: string) => {
 export const getBroadcastsByUserId = async (userId: string) => {
     const { data: member } = await supabase
         .from('members')
-        .select('id')
+        .select('id, status, expiry_date')
         .eq('user_id', userId)
         .maybeSingle();
 
@@ -196,5 +196,17 @@ export const getBroadcastsByUserId = async (userId: string) => {
         .order('sent_at', { ascending: false });
 
     if (error) throw new Error(error.message);
-    return data;
+    const settings = await getSettings();
+    const status = computeStatus(
+        member,
+        settings.expiry_reminder_days ?? 7,
+        settings.grace_period_days ?? 3,
+    );
+
+    return data.filter((broadcast: any) => {
+        if (!broadcast.target || broadcast.target === 'all') return true;
+        if (broadcast.target === 'active') return status === 'active';
+        if (broadcast.target === 'expiring') return status === 'expiring_soon';
+        return false;
+    });
 };
