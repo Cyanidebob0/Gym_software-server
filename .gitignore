@@ -16,5 +16,6 @@ Thumbs.db
 *.tmp
 *.log
 
-# Runtime exercise cache (regenerated from ExerciseDB on first boot)
-data/exercisedb-cache.json
+# The validated exercise catalogue is committed intentionally. Render's
+# filesystem is ephemeral, so excluding it makes every cold start download and
+# media-check the full upstream catalogue before workouts can load.

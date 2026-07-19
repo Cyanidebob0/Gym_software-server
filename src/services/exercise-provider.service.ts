@@ -464,9 +464,10 @@ const buildDataset = async (forceRefresh = false): Promise<NormalizedExercise[]>
 
     if (!forceRefresh) {
         const cached = await readCacheFile();
-        if (cached && isCacheFresh(cached) && cached.records.length > 0) {
+        if (cached && cached.records.length > 0) {
+            const freshness = isCacheFresh(cached) ? 'fresh' : 'bundled';
             // eslint-disable-next-line no-console
-            console.log(`[exercise-provider] loaded ${cached.records.length} exercises from disk cache (age: ${Math.floor((Date.now() - cached.fetchedAt) / (60 * 60 * 1000))}h)`);
+            console.log(`[exercise-provider] loaded ${cached.records.length} exercises from ${freshness} disk cache (age: ${Math.floor((Date.now() - cached.fetchedAt) / (60 * 60 * 1000))}h)`);
             records = cached.records;
         }
     }
