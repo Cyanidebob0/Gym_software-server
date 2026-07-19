@@ -135,17 +135,26 @@ export const confirm = async (paymentId: string) => {
     const member = payment.members as any;
     const plan = payment.plans as any;
     if (!member || !plan) throw new Error('Payment member or plan no longer exists');
-    if (member.status !== 'approved') throw new Error('Member is not awaiting payment');
+    const isInitialPayment = member.status === 'approved';
+    const canConfirmPayment = ['approved', 'active', 'expired', 'expiring_soon'].includes(member.status);
+    if (!canConfirmPayment) throw new Error('Member is not eligible for this payment');
     if (member.access_state === 'blocked' || member.access_state === 'cancelled') {
         throw new Error('Member access is restricted');
     }
     if (Number(payment.amount) !== Number(plan.price)) throw new Error('Payment amount does not match the plan price');
-    if (member.plan_id && member.plan_id !== plan.id) throw new Error('Payment plan does not match the assigned plan');
+    if (isInitialPayment && member.plan_id && member.plan_id !== plan.id) {
+        throw new Error('Payment plan does not match the assigned plan');
+    }
 
     const today = new Date().toISOString().slice(0, 10);
     const joinDate = member.join_date || today;
-    const expiryDate = member.expiry_date || addDays(joinDate, plan.duration_days);
-    const status = expiryDate >= today ? 'active' : 'expired';
+    const renewalBase = !isInitialPayment && member.expiry_date && member.expiry_date > today
+        ? member.expiry_date
+        : today;
+    const expiryDate = isInitialPayment
+        ? (member.expiry_date || addDays(joinDate, plan.duration_days))
+        : addDays(renewalBase, plan.duration_days);
+    const status = 'active';
 
     await runSteps([
         {
@@ -175,7 +184,7 @@ export const confirm = async (paymentId: string) => {
                         status,
                     })
                     .eq('id', member.id)
-                    .eq('status', 'approved')
+                    .eq('status', member.status)
                     .select()
                     .single();
                 if (error || !data) throw new Error(error?.message || 'Failed to activate member');

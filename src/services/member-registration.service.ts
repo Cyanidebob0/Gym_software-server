@@ -77,7 +77,7 @@ export const selfRegister = async (
 export const getActivePlansByUserId = async (userId: string) => {
     const { data: member } = await supabase
         .from('members')
-        .select('plan_id')
+        .select('plan_id, status')
         .eq('user_id', userId)
         .maybeSingle();
 
@@ -87,7 +87,9 @@ export const getActivePlansByUserId = async (userId: string) => {
         .eq('is_active', true)
         .order('price', { ascending: true });
 
-    if (member?.plan_id) query = query.eq('id', member.plan_id);
+    // During initial activation the owner-assigned plan remains authoritative.
+    // Existing members may compare every active plan when renewing/switching.
+    if (member?.status === 'approved' && member.plan_id) query = query.eq('id', member.plan_id);
     const { data, error } = await query;
 
     if (error) throw new Error(error.message);
@@ -133,11 +135,13 @@ export const requestPayment = async (
         .single();
 
     if (memberError || !member) throw new Error('Member not found');
-    if (member.status !== 'approved') throw new Error('Your membership is not ready for payment');
+    const isInitialPayment = member.status === 'approved';
+    const canRequestPayment = ['approved', 'active', 'expired', 'expiring_soon'].includes(member.status);
+    if (!canRequestPayment) throw new Error('Your membership is not ready for a payment request');
     if (member.access_state === 'blocked' || member.access_state === 'cancelled') {
         throw new Error('This membership cannot request a payment');
     }
-    if (member.plan_id && member.plan_id !== body.plan_id) {
+    if (isInitialPayment && member.plan_id && member.plan_id !== body.plan_id) {
         throw new Error('Choose the plan assigned by the gym owner');
     }
 
