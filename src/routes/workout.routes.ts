@@ -13,6 +13,7 @@ import {
     addPlaylistExercisesSchema,
 } from '../validators/workout.validator';
 import * as WorkoutController from '../controllers/workout.controller';
+import { requireWritableMembership } from '../middleware/membership-access.middleware';
 
 const router = Router();
 
@@ -48,25 +49,25 @@ router.get('/exercises/:id', WorkoutController.getExerciseDetail);
 // Workout sessions
 router.get('/sessions', WorkoutController.getSessions);
 router.get('/sessions/:id', WorkoutController.getSession);
-router.post('/sessions', validate(createSessionSchema), WorkoutController.createSession);
-router.patch('/sessions/:id', validate(updateSessionSchema), WorkoutController.updateSession);
-router.post('/sessions/:id/photos', photoUploadRateLimit, photoUpload.array('photos', 4), WorkoutController.uploadSessionPhotos);
-router.delete('/sessions/:id', WorkoutController.deleteSession);
+router.post('/sessions', requireWritableMembership, validate(createSessionSchema), WorkoutController.createSession);
+router.patch('/sessions/:id', requireWritableMembership, validate(updateSessionSchema), WorkoutController.updateSession);
+router.post('/sessions/:id/photos', requireWritableMembership, photoUploadRateLimit, photoUpload.array('photos', 4), WorkoutController.uploadSessionPhotos);
+router.delete('/sessions/:id', requireWritableMembership, WorkoutController.deleteSession);
 
 // Progress
 router.get('/progress/:exerciseId', WorkoutController.getProgress);
 
 // Saved exercises
 router.get('/saved', WorkoutController.getSavedExercises);
-router.post('/saved', validate(saveExerciseSchema), WorkoutController.saveExercise);
-router.delete('/saved/:exerciseId', WorkoutController.unsaveExercise);
+router.post('/saved', requireWritableMembership, validate(saveExerciseSchema), WorkoutController.saveExercise);
+router.delete('/saved/:exerciseId', requireWritableMembership, WorkoutController.unsaveExercise);
 
 // Playlists
 router.get('/playlists', WorkoutController.getPlaylists);
-router.post('/playlists', validate(createPlaylistSchema), WorkoutController.createPlaylist);
-router.patch('/playlists/:id', validate(updatePlaylistSchema), WorkoutController.updatePlaylist);
-router.delete('/playlists/:id', WorkoutController.deletePlaylist);
-router.post('/playlists/:id/exercises', validate(addPlaylistExercisesSchema), WorkoutController.addPlaylistExercises);
-router.delete('/playlists/:id/exercises/:exerciseId', WorkoutController.removePlaylistExercise);
+router.post('/playlists', requireWritableMembership, validate(createPlaylistSchema), WorkoutController.createPlaylist);
+router.patch('/playlists/:id', requireWritableMembership, validate(updatePlaylistSchema), WorkoutController.updatePlaylist);
+router.delete('/playlists/:id', requireWritableMembership, WorkoutController.deletePlaylist);
+router.post('/playlists/:id/exercises', requireWritableMembership, validate(addPlaylistExercisesSchema), WorkoutController.addPlaylistExercises);
+router.delete('/playlists/:id/exercises/:exerciseId', requireWritableMembership, WorkoutController.removePlaylistExercise);
 
 export default router;

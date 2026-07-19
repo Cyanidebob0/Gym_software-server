@@ -2,11 +2,16 @@ import { Response, NextFunction } from 'express';
 import { sendError } from '../utils/response';
 import { UserRole } from '../types';
 import { AuthRequest } from '../types/express.d';
+import { isOwnerEmail } from '../config/whitelist';
 
 export const authorize = (...roles: UserRole[]) => {
     return (req: AuthRequest, res: Response, next: NextFunction): void => {
         if (!req.user) {
             sendError(res, 'Not authenticated', 401);
+            return;
+        }
+        if (isOwnerEmail(req.user.email) && req.user.authMethod !== 'password') {
+            sendError(res, 'Gym owners can only sign in with email and password', 403);
             return;
         }
         if (!roles.includes(req.user.role)) {

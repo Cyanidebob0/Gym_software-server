@@ -1,8 +1,9 @@
 import { Response, NextFunction } from 'express';
 import supabase from '../config/supabase';
 import { sendError } from '../utils/response';
-import { UserRole } from '../types';
+import { AuthMethod, UserRole } from '../types';
 import { AuthRequest } from '../types/express.d';
+import { getAuthMethodFromToken } from '../utils/auth-method';
 
 // ── Auth + profile cache ──────────────────────────────────────────────────────
 // Caches the full auth result (user identity + profile) keyed by token.
@@ -11,6 +12,7 @@ interface CachedAuth {
     id: string;
     email: string;
     role: UserRole;
+    authMethod: AuthMethod;
     expiry: number;
 }
 
@@ -46,7 +48,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     // Check cache first — avoids slow remote getUser() call
     const cached = authCache.get(token);
     if (cached && cached.expiry > Date.now()) {
-        req.user = { id: cached.id, email: cached.email, role: cached.role };
+        req.user = { id: cached.id, email: cached.email, role: cached.role, authMethod: cached.authMethod };
         return next();
     }
 
@@ -68,6 +70,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
         .single();
 
     const role = (profile?.role ?? 'member') as UserRole;
+    const authMethod = getAuthMethodFromToken(token);
 
     // Only cache once a real profile row exists. Otherwise a request that
     // races ahead of /auth/sync would pin role='member' for 5 minutes
@@ -77,6 +80,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
             id: user.id,
             email: user.email ?? '',
             role,
+            authMethod,
             expiry: Date.now() + CACHE_TTL_MS,
         });
     }
@@ -85,6 +89,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
         id: user.id,
         email: user.email ?? '',
         role,
+        authMethod,
     };
 
     next();

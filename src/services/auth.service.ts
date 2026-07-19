@@ -1,6 +1,34 @@
 import supabase from '../config/supabase';
 import { isOwnerEmail } from '../config/whitelist';
-import { UserRole } from '../types';
+import { AuthMethod, UserRole } from '../types';
+
+export const OWNER_PASSWORD_REQUIRED = 'Gym owners can only sign in with email and password';
+
+const rejectOwnerNonPasswordAuth = async (
+    id: string,
+    email: string,
+    authMethod: AuthMethod,
+): Promise<void> => {
+    if (!isOwnerEmail(email) || authMethod === 'password') return;
+
+    const { data } = await supabase.auth.admin.getUserById(id);
+    const providers = new Set((data.user?.identities ?? []).map((identity) => identity.provider));
+    const isOAuthOnlyAccount = providers.has('google') && !providers.has('email');
+
+    // Delete only an OAuth-only owner identity. If Google was linked to an
+    // existing password owner, preserve the valid account and reject this session.
+    if (isOAuthOnlyAccount) {
+        const { error } = await supabase.auth.admin.deleteUser(id);
+        if (error && !error.message.toLowerCase().includes('not found')) {
+            throw new Error('Owner Google sign-in was rejected, but account cleanup failed');
+        }
+        // Usually removed by the auth.users foreign-key cascade; this also
+        // cleans installations where the public profile has no cascade.
+        await supabase.from('users').delete().eq('id', id);
+    }
+
+    throw new Error(OWNER_PASSWORD_REQUIRED);
+};
 
 export const getMe = async (userId: string) => {
     const { data, error } = await supabase
@@ -22,7 +50,9 @@ export const syncUser = async (
     id: string,
     email: string,
     name?: string,
+    authMethod: AuthMethod = 'unknown',
 ): Promise<{ user: Record<string, unknown>; changed: boolean }> => {
+    await rejectOwnerNonPasswordAuth(id, email, authMethod);
     const role = resolveRole(email);
 
     const { data: existing } = await supabase
@@ -61,6 +91,7 @@ export const syncUser = async (
 export const linkPassword = async (userId: string, password: string): Promise<void> => {
     const { data, error: userError } = await supabase.auth.admin.getUserById(userId);
     if (userError || !data.user) throw new Error('Authenticated account not found');
+    if (isOwnerEmail(data.user.email)) throw new Error(OWNER_PASSWORD_REQUIRED);
 
     const hasGoogleIdentity = data.user.identities?.some(
         (identity) => identity.provider === 'google',

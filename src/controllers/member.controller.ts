@@ -25,12 +25,22 @@ export const getById = async (req: AuthRequest, res: Response): Promise<void> =>
     }
 };
 
-export const create = async (req: AuthRequest, res: Response): Promise<void> => {
+export const activatePendingMember = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await MemberService.create(req.body);
-        sendSuccess(res, data, 'Member created', 201);
+        const data = await MemberService.activatePendingMember(req.params.id as string, req.body);
+        sendSuccess(res, data, 'Member added and activated');
     } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Failed to create member';
+        const message = err instanceof Error ? err.message : 'Failed to activate member';
+        sendError(res, message, 400);
+    }
+};
+
+export const renewMember = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const data = await MemberService.renewMember(req.params.id as string, req.body);
+        sendSuccess(res, data, req.body.has_paid ? 'Membership renewed' : 'Renewal assigned; payment required');
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to renew member';
         sendError(res, message, 400);
     }
 };
@@ -41,6 +51,21 @@ export const update = async (req: AuthRequest, res: Response): Promise<void> => 
         sendSuccess(res, data, 'Member updated');
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to update member';
+        sendError(res, message, 400);
+    }
+};
+
+export const updateAccessState = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const state = req.body.state;
+        if (!['normal', 'cancelled', 'blocked'].includes(state)) {
+            sendError(res, 'State must be normal, cancelled, or blocked', 422);
+            return;
+        }
+        const data = await MemberService.updateAccessState(req.params.id as string, state);
+        sendSuccess(res, data, state === 'normal' ? 'Member access restored' : `Member ${state}`);
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to update member access';
         sendError(res, message, 400);
     }
 };
@@ -68,7 +93,16 @@ export const getMyStatus = async (req: AuthRequest, res: Response): Promise<void
 
 export const selfRegister = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await MemberService.selfRegister(req.user!.id, req.body);
+        if (!req.file) {
+            sendError(res, 'Upload a photo of your selected ID document', 422);
+            return;
+        }
+        const data = await MemberService.selfRegister(
+            req.user!.id,
+            req.user!.email,
+            req.body,
+            req.file,
+        );
         sendSuccess(res, data, 'Registration submitted', 201);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to register';
@@ -103,7 +137,9 @@ export const approveMember = async (req: AuthRequest, res: Response): Promise<vo
             sendError(res, 'Status must be approved or blocked', 422);
             return;
         }
-        const data = await MemberService.update(req.params.id as string, { status });
+        const data = status === 'blocked'
+            ? await MemberService.updateAccessState(req.params.id as string, 'blocked')
+            : await MemberService.update(req.params.id as string, { status, access_state: 'normal' });
         sendSuccess(res, data, `Member ${status}`);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to update member';

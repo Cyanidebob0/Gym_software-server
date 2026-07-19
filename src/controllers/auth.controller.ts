@@ -18,12 +18,15 @@ export const sync = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { id, email } = req.user!;
         const name = req.body.name as string | undefined;
-        const { user, changed } = await AuthService.syncUser(id, email, name);
+        const { user, changed } = await AuthService.syncUser(id, email, name, req.user!.authMethod);
         if (changed) invalidateAuthCacheForUser(id);
         sendSuccess(res, user, 'User synced');
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to sync user';
-        sendError(res, message, 400);
+        if (message === AuthService.OWNER_PASSWORD_REQUIRED) {
+            invalidateAuthCacheForUser(req.user!.id);
+        }
+        sendError(res, message, message === AuthService.OWNER_PASSWORD_REQUIRED ? 403 : 400);
     }
 };
 
