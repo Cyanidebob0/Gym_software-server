@@ -5,6 +5,7 @@ import * as DashboardService from '../services/dashboard.service';
 
 export const getDashboard = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
+        res.setHeader('Cache-Control', 'private, max-age=10, stale-while-revalidate=20');
         const data = await DashboardService.getDashboard();
         sendSuccess(res, data);
     } catch (err: unknown) {

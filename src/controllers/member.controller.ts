@@ -120,6 +120,26 @@ export const getMyPlans = async (req: AuthRequest, res: Response): Promise<void>
     }
 };
 
+export const getMyPaymentRequest = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const data = await MemberService.getPaymentRequestByUserId(req.user!.id);
+        sendSuccess(res, data);
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to fetch payment request';
+        sendError(res, message, 400);
+    }
+};
+
+export const requestPayment = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const data = await MemberService.requestPayment(req.user!.id, req.body);
+        sendSuccess(res, data, 'Payment request sent to the gym owner', 201);
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to request payment';
+        sendError(res, message, 400);
+    }
+};
+
 export const activateWithPayment = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const data = await MemberService.activateWithPayment(req.user!.id, req.body);

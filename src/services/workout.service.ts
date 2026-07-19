@@ -3,6 +3,7 @@ import {
     getBodyParts,
     getEquipmentList,
     getExerciseById,
+    getMuscleGroups,
     getMuscleList,
     refreshExerciseCache,
     searchExercises,
@@ -84,7 +85,7 @@ export const getExerciseFilters = async () => {
         getMuscleList(),
         getEquipmentList(),
     ]);
-    return { bodyParts, muscles, equipments };
+    return { bodyParts, muscles, muscleGroups: getMuscleGroups(), equipments };
 };
 
 export const refreshExercises = async () => {

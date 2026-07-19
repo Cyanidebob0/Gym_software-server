@@ -1,5 +1,5 @@
 import supabase from '../config/supabase';
-import { generateInvoiceId } from './payment.service';
+import { generateInvoiceId, invalidatePaymentCaches } from './payment.service';
 import { runSteps } from '../utils/transaction';
 import { get as getSettings } from './settings.service';
 import { randomUUID } from 'crypto';
@@ -92,6 +92,92 @@ export const getActivePlansByUserId = async (userId: string) => {
 
     if (error) throw new Error(error.message);
     return data;
+};
+
+export const getPaymentRequestByUserId = async (userId: string) => {
+    const { data: member } = await supabase
+        .from('members')
+        .select('id')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+    if (!member) return null;
+
+    const { data, error } = await supabase
+        .from('payments')
+        .select('*, plans(name, duration_days)')
+        .eq('member_id', member.id)
+        .eq('status', 'pending')
+        .order('date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    if (error) throw new Error(error.message);
+    if (!data) return null;
+    return {
+        ...data,
+        plan_name: data.plans?.name ?? null,
+        duration_days: data.plans?.duration_days ?? null,
+        plans: undefined,
+    };
+};
+
+export const requestPayment = async (
+    userId: string,
+    body: { plan_id: string; method: 'cash' | 'upi' },
+) => {
+    const { data: member, error: memberError } = await supabase
+        .from('members')
+        .select('id, status, access_state, plan_id')
+        .eq('user_id', userId)
+        .single();
+
+    if (memberError || !member) throw new Error('Member not found');
+    if (member.status !== 'approved') throw new Error('Your membership is not ready for payment');
+    if (member.access_state === 'blocked' || member.access_state === 'cancelled') {
+        throw new Error('This membership cannot request a payment');
+    }
+    if (member.plan_id && member.plan_id !== body.plan_id) {
+        throw new Error('Choose the plan assigned by the gym owner');
+    }
+
+    const [{ data: plan, error: planError }, existingRequest] = await Promise.all([
+        supabase
+            .from('plans')
+            .select('id, name, duration_days, price')
+            .eq('id', body.plan_id)
+            .eq('is_active', true)
+            .single(),
+        getPaymentRequestByUserId(userId),
+    ]);
+
+    if (planError || !plan) throw new Error('Active membership plan not found');
+    if (existingRequest) return existingRequest;
+
+    const invoiceId = await generateInvoiceId();
+    const today = new Date().toISOString().slice(0, 10);
+    const { data, error } = await supabase
+        .from('payments')
+        .insert({
+            member_id: member.id,
+            plan_id: plan.id,
+            amount: plan.price,
+            mode: 'offline',
+            method: body.method,
+            status: 'pending',
+            date: today,
+            invoice_id: invoiceId,
+        })
+        .select()
+        .single();
+
+    if (error || !data) throw new Error(error?.message || 'Failed to create payment request');
+    invalidatePaymentCaches();
+    return {
+        ...data,
+        plan_name: plan.name,
+        duration_days: plan.duration_days,
+    };
 };
 
 export const activateWithPayment = async (userId: string, body: { plan_id: string; method: string; amount: number }) => {

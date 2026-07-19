@@ -26,13 +26,53 @@ type ExerciseFilters = {
     equipment?: string;
 };
 
+// Beginner-facing groups accepted by the exercise API. The dataset uses
+// anatomical names (for example, "Pectorals" and "Delts"), so each friendly
+// group expands to the relevant primary target muscles in the cache.
+const MUSCLE_GROUPS: Record<string, string[]> = {
+    cardio: ['cardiovascular system'],
+    chest: ['pectorals', 'serratus anterior'],
+    back: ['lats', 'spine'],
+    biceps: ['biceps'],
+    triceps: ['triceps'],
+    quadriceps: ['quads'],
+    hamstrings: ['hamstrings'],
+    shoulders: ['delts'],
+    hips: ['glutes', 'abductors', 'adductors'],
+    waist: ['abs'],
+    'upper back': ['traps', 'upper back'],
+    calves: ['calves'],
+    forearms: ['forearms'],
+    neck: ['levator scapulae'],
+};
+
+const MUSCLE_GROUP_LABELS = [
+    'Cardio',
+    'Chest',
+    'Back',
+    'Biceps',
+    'Triceps',
+    'Quadriceps',
+    'Hamstrings',
+    'Shoulders',
+    'Hips',
+    'Waist',
+    'Upper Back',
+    'Calves',
+    'Forearms',
+    'Neck',
+];
+
 const EXERCISEDB_BASE = 'https://oss.exercisedb.dev/api/v1';
 const PAGE_SIZE = 25; // OSS endpoint caps results at 25 per page
 const FETCH_TIMEOUT_MS = 15_000;
 const MAX_PAGES = 200; // safety cap (covers ~5000 exercises against the 1500-item dataset)
 const STARTER_DATASET_PATH = path.resolve(__dirname, '..', '..', 'data', 'exercises.starter.json');
 const CACHE_FILE_PATH = path.resolve(__dirname, '..', '..', 'data', 'exercisedb-cache.json');
-const CACHE_VERSION = 1;
+// Version 3 rebuilds caches with reliable ranged-GET media validation. The
+// previous HEAD-based check dropped good records, while no check left known
+// 404 GIFs visible as empty black cards.
+const CACHE_VERSION = 3;
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days for complete fetches
 const PARTIAL_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour for partial fetches
 const COMPLETE_FRACTION = 0.9; // ≥ 90% of expected total counts as "complete"
@@ -160,9 +200,10 @@ const fetchAllExercisesFromApi = async (): Promise<FetchResult> => {
         };
         let payload: Payload | null = null;
 
-        // Up to 3 attempts per page; back off on 429/5xx so a rate-limit blip
-        // doesn't wipe the whole fetch. If we still fail, return what we have.
-        for (let attempt = 0; attempt < 3; attempt++) {
+        // ExerciseDB rate-limits long pagination runs. Respect Retry-After and
+        // use a longer exponential fallback so a normal 60-page refresh can
+        // finish instead of stopping after the first 250 records.
+        for (let attempt = 0; attempt < 8; attempt++) {
             try {
                 const res = await fetchWithTimeout(url);
                 if (res.ok) {
@@ -170,7 +211,11 @@ const fetchAllExercisesFromApi = async (): Promise<FetchResult> => {
                     break;
                 }
                 if (res.status === 429 || res.status >= 500) {
-                    await sleep(1000 * (attempt + 1));
+                    const retryAfter = Number(res.headers.get('retry-after'));
+                    const delayMs = Number.isFinite(retryAfter) && retryAfter > 0
+                        ? retryAfter * 1000
+                        : Math.min(30_000, 1000 * (2 ** attempt));
+                    await sleep(delayMs);
                     continue;
                 }
                 // Other 4xx: don't retry
@@ -182,7 +227,7 @@ const fetchAllExercisesFromApi = async (): Promise<FetchResult> => {
 
         if (!payload) {
             // eslint-disable-next-line no-console
-            console.warn(`[exercise-provider] gave up on page ${page} after retries; keeping ${collected.length} exercises so far`);
+            console.warn(`[exercise-provider] gave up on page ${page} after retries; fetched ${collected.length} exercises so far`);
             break;
         }
 
@@ -300,29 +345,64 @@ const readLocalDataset = async (): Promise<RawExercise[]> => {
 let datasetPromise: Promise<NormalizedExercise[]> | null = null;
 const detailCache = new Map<string, NormalizedExercise>();
 
-const probeMediaConcurrency = 20;
+const MEDIA_PROBE_CONCURRENCY = 12;
 
-const filterRecordsWithWorkingMedia = async (records: RawExercise[]): Promise<RawExercise[]> => {
-    const kept: RawExercise[] = [];
-    const queue = [...records];
+const hasUsableMedia = async (record: RawExercise): Promise<boolean> => {
+    const url = typeof record.gifUrl === 'string' ? record.gifUrl.trim() : '';
+    if (!url) return true; // Local/fallback records can use their `images` field.
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+        try {
+            // A tiny ranged GET behaves like the browser/CDN path. HEAD is not
+            // reliable on this CDN and was the reason valid exercises vanished.
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: { Range: 'bytes=0-1023' },
+                signal: controller.signal,
+            });
+
+            if (response.ok) {
+                const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+                await response.body?.cancel();
+                return contentType.startsWith('image/');
+            }
+
+            await response.body?.cancel();
+            if (response.status === 408 || response.status === 429 || response.status >= 500) {
+                await sleep(500 * (attempt + 1));
+                continue;
+            }
+
+            // A stable client error such as 404/410 means the browser cannot
+            // display this exercise either, so omit it from the catalogue.
+            return false;
+        } catch {
+            await sleep(500 * (attempt + 1));
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+
+    // Network failures are inconclusive. Keep the exercise and let the client
+    // retry naturally instead of permanently shrinking the dataset.
+    return true;
+};
+
+const filterRecordsWithUsableMedia = async (records: RawExercise[]): Promise<RawExercise[]> => {
+    const results = new Array<boolean>(records.length).fill(true);
+    let cursor = 0;
 
     const worker = async () => {
-        while (queue.length > 0) {
-            const rec = queue.shift();
-            if (!rec) break;
-            const url = typeof rec.gifUrl === 'string' ? rec.gifUrl : '';
-            if (!url) continue;
-            try {
-                const res = await fetch(url, { method: 'HEAD' });
-                if (res.ok) kept.push(rec);
-            } catch {
-                // skip
-            }
+        while (cursor < records.length) {
+            const index = cursor++;
+            results[index] = await hasUsableMedia(records[index]);
         }
     };
 
-    await Promise.all(Array.from({ length: probeMediaConcurrency }, worker));
-    return kept;
+    await Promise.all(Array.from({ length: MEDIA_PROBE_CONCURRENCY }, worker));
+    return records.filter((_record, index) => results[index]);
 };
 
 const fetchFromApiAndCache = async (): Promise<RawExercise[]> => {
@@ -335,19 +415,48 @@ const fetchFromApiAndCache = async (): Promise<RawExercise[]> => {
     }
     if (result.records.length === 0) return [];
 
-    // Drop exercises whose CDN GIF actually 404s — about 12% of the free
-    // dataset has missing media and we don't want blank cards.
-    const cleanRecords = await filterRecordsWithWorkingMedia(result.records);
+    const expectedTotal = result.expectedTotal ?? result.records.length;
+    const complete = result.records.length >= Math.floor(expectedTotal * COMPLETE_FRACTION);
+    let recordsToUse = result.records;
+
+    // If the API still cannot complete after its extended retries, prefer the
+    // larger bundled dataset rather than shrinking the app to a partial page
+    // run. Keep the upstream expected total so this cache receives the short
+    // partial TTL and will be retried later.
+    if (!complete) {
+        const localRecords = await readLocalDataset();
+        if (localRecords.length > recordsToUse.length) {
+            recordsToUse = localRecords;
+            // eslint-disable-next-line no-console
+            console.warn(`[exercise-provider] API refresh was partial (${result.records.length}/${expectedTotal}); using ${localRecords.length} bundled exercises`);
+        }
+    }
+
+    const recordsWithUsableMedia = await filterRecordsWithUsableMedia(recordsToUse);
+    const removedMediaCount = recordsToUse.length - recordsWithUsableMedia.length;
+    recordsToUse = recordsWithUsableMedia;
+    if (removedMediaCount > 0) {
+        // eslint-disable-next-line no-console
+        console.warn(`[exercise-provider] omitted ${removedMediaCount} exercises with broken media`);
+    }
+
+    // A fully paginated API fetch is complete after known-broken media is
+    // removed. Partial API/fallback results retain the upstream total so they
+    // continue using the short TTL and get retried later.
+    const cacheExpectedTotal = complete ? recordsToUse.length : expectedTotal;
 
     await writeCacheFile({
         version: CACHE_VERSION,
         fetchedAt: Date.now(),
-        expectedTotal: cleanRecords.length,
-        records: cleanRecords,
+        // Preserve the API's reported total so a partial fetch is never marked
+        // as a complete cache. Image failures are handled by the client card's
+        // fallback and must not remove valid exercise records.
+        expectedTotal: cacheExpectedTotal,
+        records: recordsToUse,
     });
     // eslint-disable-next-line no-console
-    console.log(`[exercise-provider] fetched ${result.records.length} exercises, kept ${cleanRecords.length} with working media; cached to disk`);
-    return cleanRecords;
+    console.log(`[exercise-provider] cached ${recordsToUse.length} exercises`);
+    return recordsToUse;
 };
 
 const buildDataset = async (forceRefresh = false): Promise<NormalizedExercise[]> => {
@@ -412,9 +521,12 @@ const matchesFilter = (exercise: NormalizedExercise, filters: ExerciseFilters) =
         if (!hit) return false;
     }
     if (filters.muscle) {
-        const target = filters.muscle.toLowerCase();
-        const hit = exercise.muscles.some((m) => m.name.toLowerCase() === target)
-            || (exercise.muscles_secondary ?? []).some((m) => m.name.toLowerCase() === target);
+        const target = filters.muscle.trim().toLowerCase();
+        const acceptedMuscles = new Set(MUSCLE_GROUPS[target] ?? [target]);
+        // Filtering is intentionally based on primary targets only. Including
+        // secondary stabilizers makes unrelated compound exercises appear in
+        // a group (for example, back exercises under Arms).
+        const hit = exercise.muscles.some((m) => acceptedMuscles.has(m.name.toLowerCase()));
         if (!hit) return false;
     }
     if (filters.equipment) {
@@ -474,6 +586,8 @@ export const getMuscleList = async () => {
     const dataset = await loadDataset();
     return dedupeSorted(dataset.flatMap((e) => e.muscles.map((m) => m.name)));
 };
+
+export const getMuscleGroups = () => [...MUSCLE_GROUP_LABELS];
 
 export const getEquipmentList = async () => {
     const dataset = await loadDataset();

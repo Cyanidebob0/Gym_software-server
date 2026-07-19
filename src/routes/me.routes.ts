@@ -3,7 +3,7 @@ import multer from 'multer';
 import { authenticate } from '../middleware/auth.middleware';
 import { authorize } from '../middleware/role.middleware';
 import { validate } from '../middleware/validate.middleware';
-import { selfRegisterMemberSchema, memberPaymentSchema, updateProfileSchema } from '../validators/member.validator';
+import { selfRegisterMemberSchema, memberPaymentRequestSchema, updateProfileSchema } from '../validators/member.validator';
 import * as MemberController from '../controllers/member.controller';
 import { AuthRequest } from '../types/express.d';
 import { requireWritableMembership } from '../middleware/membership-access.middleware';
@@ -37,7 +37,8 @@ router.use(authenticate, authorize('member', 'owner'));
 router.get('/status', MemberController.getMyStatus);
 router.post('/register', uploadIdDocument, validate(selfRegisterMemberSchema), MemberController.selfRegister);
 router.get('/plans', MemberController.getMyPlans);
-router.post('/activate', requireWritableMembership, validate(memberPaymentSchema), MemberController.activateWithPayment);
+router.get('/payment-request', MemberController.getMyPaymentRequest);
+router.post('/payment-request', requireWritableMembership, validate(memberPaymentRequestSchema), MemberController.requestPayment);
 
 // Existing self-service
 router.get('/profile', MemberController.getMyProfile);

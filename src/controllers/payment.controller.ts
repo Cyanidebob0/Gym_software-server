@@ -44,3 +44,23 @@ export const getStats = async (req: AuthRequest, res: Response): Promise<void> =
         sendError(res, message, 400);
     }
 };
+
+export const getPendingCount = async (_req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const data = await PaymentService.getPendingCount();
+        sendSuccess(res, data);
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to fetch pending payment count';
+        sendError(res, message, 400);
+    }
+};
+
+export const confirm = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const data = await PaymentService.confirm(req.params.id as string);
+        sendSuccess(res, data, 'Payment confirmed and membership activated');
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to confirm payment';
+        sendError(res, message, 400);
+    }
+};

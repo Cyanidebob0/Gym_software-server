@@ -92,6 +92,11 @@ export const memberPaymentSchema = z.object({
     amount: z.number().positive('Amount must be positive'),
 });
 
+export const memberPaymentRequestSchema = z.object({
+    plan_id: z.string().uuid('Select a valid membership plan'),
+    method: z.enum(['cash', 'upi'], { message: 'Choose Cash or Offline UPI' }),
+});
+
 export const updateProfileSchema = z.object({
     name: z.string().min(1, 'Name is required').max(100).optional(),
     phone: z.string().min(10, 'Phone must be at least 10 digits').optional(),

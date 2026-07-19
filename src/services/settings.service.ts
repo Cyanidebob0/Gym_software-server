@@ -1,4 +1,5 @@
 import supabase from '../config/supabase';
+import { createAsyncCache } from '../utils/async-cache';
 
 const DEFAULT_SETTINGS = {
     gym_name: 'Sweat Zone',
@@ -11,8 +12,10 @@ const DEFAULT_SETTINGS = {
     grace_period_days: 3,
 };
 
+const settingsCache = createAsyncCache<Record<string, any>>(60_000);
+
 // Settings is a singleton table for the one Sweat Zone installation.
-export const get = async () => {
+export const get = async () => settingsCache.get(async () => {
     const { data, error } = await supabase
         .from('settings')
         .select('*')
@@ -21,7 +24,7 @@ export const get = async () => {
 
     if (error) throw new Error(error.message);
     return data ?? DEFAULT_SETTINGS;
-};
+});
 
 export const upsert = async (body: Record<string, any>) => {
     const { data: existing, error: readError } = await supabase
@@ -39,5 +42,6 @@ export const upsert = async (body: Record<string, any>) => {
 
     const { data, error } = await query.select().single();
     if (error) throw new Error(error.message);
+    settingsCache.invalidate();
     return data;
 };

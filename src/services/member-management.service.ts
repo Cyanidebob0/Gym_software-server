@@ -2,6 +2,9 @@ import supabase from '../config/supabase';
 import { get as getSettings } from './settings.service';
 import { generateInvoiceId } from './payment.service';
 import { runSteps } from '../utils/transaction';
+import { createAsyncCache } from '../utils/async-cache';
+
+const memberStatsCache = createAsyncCache<Record<string, number>>(10_000);
 
 const computeStatus = (
     member: any,
@@ -401,7 +404,7 @@ export const update = async (memberId: string, body: Record<string, any>) => {
     return data;
 };
 
-export const getStats = async () => {
+export const getStats = async () => memberStatsCache.get(async () => {
     const [{ data, error }, settings] = await Promise.all([
         supabase
             .from('members')
@@ -425,4 +428,4 @@ export const getStats = async () => {
         else if (status === 'pending') stats.pending++;
     }
     return stats;
-};
+});
