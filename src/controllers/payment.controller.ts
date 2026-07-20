@@ -64,3 +64,13 @@ export const confirm = async (req: AuthRequest, res: Response): Promise<void> =>
         sendError(res, message, 400);
     }
 };
+
+export const reject = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const data = await PaymentService.reject(req.params.id as string);
+        sendSuccess(res, data, 'Payment request rejected');
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to reject payment request';
+        sendError(res, message, 400);
+    }
+};

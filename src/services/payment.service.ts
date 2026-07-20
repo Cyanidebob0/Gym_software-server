@@ -204,3 +204,20 @@ export const confirm = async (paymentId: string) => {
     invalidatePaymentCaches();
     return getById(paymentId);
 };
+
+export const reject = async (paymentId: string) => {
+    const { data, error } = await supabase
+        .from('payments')
+        .update({ status: 'failed' })
+        .eq('id', paymentId)
+        .eq('status', 'pending')
+        .select('id')
+        .single();
+
+    if (error || !data) {
+        throw new Error('Payment request was not found or has already been handled');
+    }
+
+    invalidatePaymentCaches();
+    return getById(paymentId);
+};
