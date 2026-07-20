@@ -1,8 +1,9 @@
 import express from 'express';
+import { createHash } from 'node:crypto';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import compression from 'compression';
 import { env } from './config/env';
 import routes from './routes';
@@ -27,7 +28,14 @@ app.use(
         // Normal app navigation performs several small API reads. A higher
         // ceiling avoids locking out an entire gym sharing one public Wi-Fi IP
         // while still bounding abusive traffic on the free Render instance.
-        max: env.nodeEnv === 'development' ? 5000 : 2000,
+        max: env.nodeEnv === 'development' ? 5000 : 300,
+        keyGenerator: (req) => {
+            const bearer = req.headers.authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
+            if (bearer && bearer.split('.').length === 3) {
+                return `user:${createHash('sha256').update(bearer).digest('hex')}`;
+            }
+            return `ip:${ipKeyGenerator(req.ip || req.socket.remoteAddress || 'unknown')}`;
+        },
         skip: (req) => req.path === '/health',
         standardHeaders: true,
         legacyHeaders: false,

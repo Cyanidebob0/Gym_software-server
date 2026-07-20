@@ -41,6 +41,7 @@ router.get('/payment-request', MemberController.getMyPaymentRequest);
 router.post('/payment-request', requireWritableMembership, validate(memberPaymentRequestSchema), MemberController.requestPayment);
 
 // Existing self-service
+router.get('/dashboard', MemberController.getMyDashboard);
 router.get('/profile', MemberController.getMyProfile);
 router.patch('/profile', requireWritableMembership, validate(updateProfileSchema), MemberController.updateMyProfile);
 router.get('/attendance', MemberController.getMyAttendance);

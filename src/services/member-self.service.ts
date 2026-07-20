@@ -1,6 +1,64 @@
 import supabase from '../config/supabase';
 import { get as getSettings } from './settings.service';
 import { computeStatus } from './member-management.service';
+import { getMemberIdByUserId, rememberMemberId } from './member-identity-cache';
+
+export const getMemberDashboardByUserId = async (userId: string) => {
+    const [{ data: member, error: memberError }, settings] = await Promise.all([
+        supabase
+            .from('members')
+            .select('*, plans(name, duration_days, price)')
+            .eq('user_id', userId)
+            .maybeSingle(),
+        getSettings(),
+    ]);
+
+    if (memberError) throw new Error(memberError.message);
+    if (!member) {
+        return { status: null, profile: null, attendance: [], today_check_in: null };
+    }
+
+    rememberMemberId(userId, member.id);
+    const computedStatus = computeStatus(
+        member,
+        settings.expiry_reminder_days ?? 7,
+        settings.grace_period_days ?? 3,
+    );
+    const status = {
+        id: member.id,
+        name: member.name,
+        access_state: member.access_state,
+        status: computedStatus,
+    };
+
+    if (!['active', 'expired', 'expiring_soon', 'cancelled'].includes(computedStatus)) {
+        return { status, profile: null, attendance: [], today_check_in: null };
+    }
+
+    const { data: attendance, error: attendanceError } = await supabase
+        .from('attendance')
+        .select('date, check_in, check_out')
+        .eq('member_id', member.id)
+        .order('date', { ascending: false })
+        .order('check_in', { ascending: false });
+    if (attendanceError) throw new Error(attendanceError.message);
+
+    const today = new Date().toISOString().slice(0, 10);
+    const todayCheckIn = (attendance ?? []).find((record) => record.date === today) ?? null;
+    const profile = {
+        ...member,
+        status: computedStatus,
+        plan_name: member.plans?.name ?? null,
+        plans: member.plans,
+    };
+
+    return {
+        status,
+        profile,
+        attendance: attendance ?? [],
+        today_check_in: todayCheckIn,
+    };
+};
 
 export const getProfileByUserId = async (userId: string) => {
     const { data, error } = await supabase
@@ -24,18 +82,12 @@ export const getProfileByUserId = async (userId: string) => {
 };
 
 export const getAttendanceByUserId = async (userId: string) => {
-    const { data: member } = await supabase
-        .from('members')
-        .select('id')
-        .eq('user_id', userId)
-        .single();
-
-    if (!member) throw new Error('Member not found');
+    const memberId = await getMemberIdByUserId(userId);
 
     const { data, error } = await supabase
         .from('attendance')
         .select('date, check_in, check_out')
-        .eq('member_id', member.id)
+        .eq('member_id', memberId)
         .order('date', { ascending: false })
         .order('check_in', { ascending: false });
 
@@ -44,18 +96,12 @@ export const getAttendanceByUserId = async (userId: string) => {
 };
 
 export const getPaymentsByUserId = async (userId: string) => {
-    const { data: member } = await supabase
-        .from('members')
-        .select('id')
-        .eq('user_id', userId)
-        .single();
-
-    if (!member) throw new Error('Member not found');
+    const memberId = await getMemberIdByUserId(userId);
 
     const { data, error } = await supabase
         .from('payments')
         .select('*, plans(name)')
-        .eq('member_id', member.id)
+        .eq('member_id', memberId)
         .order('date', { ascending: false });
 
     if (error) throw new Error(error.message);
@@ -63,13 +109,7 @@ export const getPaymentsByUserId = async (userId: string) => {
 };
 
 export const updateProfileByUserId = async (userId: string, body: { name?: string; phone?: string; address?: string; gender?: string }) => {
-    const { data: member } = await supabase
-        .from('members')
-        .select('id')
-        .eq('user_id', userId)
-        .single();
-
-    if (!member) throw new Error('Member not found');
+    const memberId = await getMemberIdByUserId(userId);
 
     const allowed: Record<string, any> = {};
     if (body.name !== undefined) allowed.name = body.name;
@@ -82,7 +122,7 @@ export const updateProfileByUserId = async (userId: string, body: { name?: strin
     const { data, error } = await supabase
         .from('members')
         .update(allowed)
-        .eq('id', member.id)
+        .eq('id', memberId)
         .select()
         .single();
 
@@ -126,13 +166,7 @@ export const selfCheckIn = async (userId: string) => {
 };
 
 export const selfCheckOut = async (userId: string) => {
-    const { data: member } = await supabase
-        .from('members')
-        .select('id')
-        .eq('user_id', userId)
-        .single();
-
-    if (!member) throw new Error('Member not found');
+    const memberId = await getMemberIdByUserId(userId);
 
     const today = new Date().toISOString().split('T')[0];
     const checkOut = new Date().toTimeString().slice(0, 5);
@@ -140,7 +174,7 @@ export const selfCheckOut = async (userId: string) => {
     const { data: open } = await supabase
         .from('attendance')
         .select('id')
-        .eq('member_id', member.id)
+        .eq('member_id', memberId)
         .eq('date', today)
         .is('check_out', null)
         .limit(1);
@@ -159,20 +193,19 @@ export const selfCheckOut = async (userId: string) => {
 };
 
 export const getTodayCheckIn = async (userId: string) => {
-    const { data: member } = await supabase
-        .from('members')
-        .select('id')
-        .eq('user_id', userId)
-        .single();
-
-    if (!member) return null;
+    let memberId: string;
+    try {
+        memberId = await getMemberIdByUserId(userId);
+    } catch {
+        return null;
+    }
 
     const today = new Date().toISOString().split('T')[0];
 
     const { data } = await supabase
         .from('attendance')
         .select('id, check_in, check_out')
-        .eq('member_id', member.id)
+        .eq('member_id', memberId)
         .eq('date', today)
         .order('check_in', { ascending: false })
         .limit(1);

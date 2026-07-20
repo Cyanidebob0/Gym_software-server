@@ -4,6 +4,7 @@ import { sendError } from '../utils/response';
 import { AuthMethod, UserRole } from '../types';
 import { AuthRequest } from '../types/express.d';
 import { getAuthMethodFromToken } from '../utils/auth-method';
+import { isOwnerEmail } from '../config/whitelist';
 
 // ── Auth + profile cache ──────────────────────────────────────────────────────
 // Caches the full auth result (user identity + profile) keyed by token.
@@ -52,42 +53,31 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
         return next();
     }
 
-    // Cache miss — verify token with Supabase (slow, 1-10s)
-    const { data: { user }, error } = await supabase.auth.getUser(token);
+    // Cache miss — verify the signed JWT. Supabase performs this locally when
+    // the project uses asymmetric signing keys and safely falls back otherwise.
+    const { data, error } = await supabase.auth.getClaims(token);
+    const claims = data?.claims;
 
-    if (error || !user) {
+    if (error || !claims?.sub) {
         authCache.delete(token);
         sendError(res, 'Invalid or expired token', 401);
         return;
     }
 
-    // Fetch the application role. Sweat Zone is a single-gym system, so
-    // authenticated users no longer carry tenant identifiers.
-    const { data: profile } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-
-    const role = (profile?.role ?? 'member') as UserRole;
+    // Sweat Zone is a single-gym system: owners come from the server-side
+    // whitelist and every other authenticated account is a member.
+    const userId = claims.sub;
+    const email = typeof claims.email === 'string' ? claims.email : '';
+    const role: UserRole = isOwnerEmail(email) ? 'owner' : 'member';
     const authMethod = getAuthMethodFromToken(token);
+    const tokenExpiry = typeof claims.exp === 'number' ? claims.exp * 1000 : Date.now() + CACHE_TTL_MS;
+    const expiry = Math.min(Date.now() + CACHE_TTL_MS, tokenExpiry);
 
-    // Only cache once a real profile row exists. Otherwise a request that
-    // races ahead of /auth/sync would pin role='member' for 5 minutes
-    // even after sync promotes the user.
-    if (profile) {
-        authCache.set(token, {
-            id: user.id,
-            email: user.email ?? '',
-            role,
-            authMethod,
-            expiry: Date.now() + CACHE_TTL_MS,
-        });
-    }
+    authCache.set(token, { id: userId, email, role, authMethod, expiry });
 
     req.user = {
-        id: user.id,
-        email: user.email ?? '',
+        id: userId,
+        email,
         role,
         authMethod,
     };

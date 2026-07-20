@@ -168,6 +168,16 @@ export const approveMember = async (req: AuthRequest, res: Response): Promise<vo
 };
 
 // Member self-service endpoints
+export const getMyDashboard = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const data = await MemberService.getMemberDashboardByUserId(req.user!.id);
+        sendSuccess(res, data);
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to fetch member dashboard';
+        sendError(res, message, 400);
+    }
+};
+
 export const getMyProfile = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const data = await MemberService.getProfileByUserId(req.user!.id);

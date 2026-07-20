@@ -8,6 +8,7 @@ import {
     refreshExerciseCache,
     searchExercises,
 } from './exercise-provider.service';
+import { getMemberIdByUserId } from './member-identity-cache';
 
 type ExerciseId = string | number;
 
@@ -53,16 +54,7 @@ const withSignedPhotos = async <T extends Record<string, any>>(session: T): Prom
     image_urls: await signPhotoPaths(session.image_urls),
 });
 
-const getMemberId = async (userId: string): Promise<string> => {
-    const { data } = await supabase
-        .from('members')
-        .select('id')
-        .eq('user_id', userId)
-        .single();
-
-    if (!data) throw new Error('Member not found');
-    return data.id;
-};
+const getMemberId = getMemberIdByUserId;
 
 export const getExercises = async ({
     search = '',
