@@ -8,11 +8,16 @@ const requireRefundsEnabled = async () => {
 
 const money = (value: unknown) => Number(value) || 0;
 
-export const getAll = async () => {
-    const { data, error } = await supabase
+export const getAll = async (limit?: number, offset?: number) => {
+    let query = supabase
         .from('refunds')
         .select('*, members(name), payments(invoice_id)')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false });
+
+    if (limit !== undefined) query = query.range(offset || 0, (offset || 0) + limit - 1);
+
+    const { data, error } = await query;
 
     if (error) throw new Error(error.message);
     return data.map((r: any) => ({

@@ -1,11 +1,13 @@
 import { Response } from 'express';
 import { sendSuccess, sendError } from '../utils/response';
 import { AuthRequest } from '../types/express.d';
+import { parsePagination } from '../utils/pagination';
 import * as RefundService from '../services/refund.service';
 
 export const getAll = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await RefundService.getAll();
+        const { limit, offset } = parsePagination(req);
+        const data = await RefundService.getAll(limit, offset);
         sendSuccess(res, data);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to fetch refunds';

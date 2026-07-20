@@ -4,7 +4,8 @@ export const getAll = async (limit?: number, offset?: number) => {
     let query = supabase
         .from('broadcasts')
         .select('*')
-        .order('sent_at', { ascending: false });
+        .order('sent_at', { ascending: false })
+        .order('id', { ascending: false });
 
     if (limit !== undefined) query = query.range(offset || 0, (offset || 0) + limit - 1);
 

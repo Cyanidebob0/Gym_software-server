@@ -10,6 +10,11 @@ import { errorHandler, notFound } from './middleware/error.middleware';
 
 const app = express();
 
+// Render terminates TLS and forwards the real client address. Trust exactly
+// that proxy hop so rate limiting is based on the visitor instead of Render's
+// shared proxy address.
+app.set('trust proxy', 1);
+
 // Security
 app.use(helmet());
 app.use(cors({ origin: env.clientUrl, credentials: true }));
@@ -19,7 +24,13 @@ app.use(compression({ threshold: 1024 }));
 app.use(
     rateLimit({
         windowMs: 15 * 60 * 1000,
-        max: env.nodeEnv === 'development' ? 5000 : 300,
+        // Normal app navigation performs several small API reads. A higher
+        // ceiling avoids locking out an entire gym sharing one public Wi-Fi IP
+        // while still bounding abusive traffic on the free Render instance.
+        max: env.nodeEnv === 'development' ? 5000 : 2000,
+        skip: (req) => req.path === '/health',
+        standardHeaders: true,
+        legacyHeaders: false,
         message: { success: false, message: 'Too many requests, please try again later.' },
     })
 );

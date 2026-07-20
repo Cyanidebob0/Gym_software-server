@@ -1,6 +1,7 @@
 import supabase from '../config/supabase';
 import { runSteps } from '../utils/transaction';
 import { createAsyncCache } from '../utils/async-cache';
+import { randomBytes } from 'node:crypto';
 
 const paymentStatsCache = createAsyncCache<{ monthly_revenue: number; yearly_revenue: number }>(15_000);
 const pendingCountCache = createAsyncCache<{ count: number }>(5_000);
@@ -21,21 +22,18 @@ export const generateInvoiceId = async (): Promise<string> => {
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const prefix = `INV-${year}${month}`;
-
-    const { count, error } = await supabase
-        .from('payments')
-        .select('*', { count: 'exact', head: true })
-        .like('invoice_id', `${prefix}-%`);
-
-    const seq = (error || count === null ? 0 : count) + 1;
-    return `${prefix}-${String(seq).padStart(4, '0')}`;
+    // Counting existing invoices races when two payments are created at once.
+    // A 40-bit cryptographic suffix avoids that database round trip and makes
+    // concurrent collisions practically negligible for a single-gym system.
+    return `${prefix}-${randomBytes(5).toString('hex').toUpperCase()}`;
 };
 
 export const getAll = async (limit?: number, offset?: number) => {
     let query = supabase
         .from('payments')
         .select('*, members(name, email), plans(name)')
-        .order('date', { ascending: false });
+        .order('date', { ascending: false })
+        .order('id', { ascending: false });
 
     if (limit !== undefined) query = query.range(offset || 0, (offset || 0) + limit - 1);
 
