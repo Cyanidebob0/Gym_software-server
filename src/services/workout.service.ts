@@ -92,6 +92,7 @@ export const getSessions = async (userId: string, limit = 20, offset = 0) => {
         .select('*, workout_sets(*)')
         .eq('member_id', memberId)
         .order('date', { ascending: false })
+        .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
 
     if (error) throw new Error(error.message);
