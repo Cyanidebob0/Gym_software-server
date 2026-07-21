@@ -15,7 +15,13 @@ export const getMemberDashboardByUserId = async (userId: string) => {
 
     if (memberError) throw new Error(memberError.message);
     if (!member) {
-        return { status: null, profile: null, attendance: [], today_check_in: null };
+        return {
+            status: null,
+            profile: null,
+            attendance: [],
+            today_check_in: null,
+            online_registration: settings.online_registration !== false,
+        };
     }
 
     rememberMemberId(userId, member.id);
@@ -32,7 +38,13 @@ export const getMemberDashboardByUserId = async (userId: string) => {
     };
 
     if (!['active', 'expired', 'expiring_soon', 'cancelled'].includes(computedStatus)) {
-        return { status, profile: null, attendance: [], today_check_in: null };
+        return {
+            status,
+            profile: null,
+            attendance: [],
+            today_check_in: null,
+            online_registration: settings.online_registration !== false,
+        };
     }
 
     const { data: attendance, error: attendanceError } = await supabase
@@ -57,6 +69,7 @@ export const getMemberDashboardByUserId = async (userId: string) => {
         profile,
         attendance: attendance ?? [],
         today_check_in: todayCheckIn,
+        online_registration: settings.online_registration !== false,
     };
 };
 
@@ -131,14 +144,22 @@ export const updateProfileByUserId = async (userId: string, body: { name?: strin
 };
 
 export const selfCheckIn = async (userId: string) => {
-    const { data: member } = await supabase
-        .from('members')
-        .select('id, status')
-        .eq('user_id', userId)
-        .single();
+    const [{ data: member }, settings] = await Promise.all([
+        supabase
+            .from('members')
+            .select('id, status, access_state, expiry_date')
+            .eq('user_id', userId)
+            .single(),
+        getSettings(),
+    ]);
 
     if (!member) throw new Error('Member not found');
-    if (!['active', 'expiring_soon'].includes(member.status)) throw new Error('Membership not active');
+    const status = computeStatus(
+        member,
+        settings.expiry_reminder_days ?? 7,
+        settings.grace_period_days ?? 3,
+    );
+    if (!['active', 'expiring_soon'].includes(status)) throw new Error('Membership not active');
 
     const today = new Date().toISOString().split('T')[0];
     const checkIn = new Date().toTimeString().slice(0, 5);

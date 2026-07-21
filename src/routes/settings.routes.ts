@@ -7,6 +7,9 @@ import * as SettingsController from '../controllers/settings.controller';
 
 const router = Router();
 
+// Only non-sensitive business identity fields are exposed to the public site.
+router.get('/public', SettingsController.getPublic);
+
 router.use(authenticate, authorize('owner'));
 
 router.get('/', SettingsController.get);

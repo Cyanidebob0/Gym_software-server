@@ -26,6 +26,15 @@ export const get = async () => settingsCache.get(async () => {
     return data ?? DEFAULT_SETTINGS;
 });
 
+export const getPublic = async () => {
+    const settings = await get();
+    return {
+        gym_name: settings.gym_name ?? DEFAULT_SETTINGS.gym_name,
+        gym_address: settings.gym_address ?? DEFAULT_SETTINGS.gym_address,
+        gym_phone: settings.gym_phone ?? DEFAULT_SETTINGS.gym_phone,
+    };
+};
+
 export const upsert = async (body: Record<string, any>) => {
     const { data: existing, error: readError } = await supabase
         .from('settings')
@@ -35,7 +44,9 @@ export const upsert = async (body: Record<string, any>) => {
 
     if (readError) throw new Error(readError.message);
 
-    const payload = { ...body, gym_name: 'Sweat Zone' };
+    const payload = existing
+        ? { ...body, gym_name: 'Sweat Zone' }
+        : { ...DEFAULT_SETTINGS, ...body, gym_name: 'Sweat Zone' };
     const query = existing
         ? supabase.from('settings').update(payload).eq('id', existing.id)
         : supabase.from('settings').insert(payload);
