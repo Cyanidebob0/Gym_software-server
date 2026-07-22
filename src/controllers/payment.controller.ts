@@ -3,6 +3,7 @@ import { sendSuccess, sendError } from '../utils/response';
 import { AuthRequest } from '../types/express.d';
 import { parsePagination } from '../utils/pagination';
 import * as PaymentService from '../services/payment.service';
+import { requestIdempotencyKey } from '../utils/idempotency';
 
 export const getAll = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -27,7 +28,7 @@ export const getById = async (req: AuthRequest, res: Response): Promise<void> =>
 
 export const create = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await PaymentService.create(req.body);
+        const data = await PaymentService.create(req.body, requestIdempotencyKey(req));
         sendSuccess(res, data, 'Payment created', 201);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to create payment';
@@ -57,7 +58,7 @@ export const getPendingCount = async (_req: AuthRequest, res: Response): Promise
 
 export const confirm = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await PaymentService.confirm(req.params.id as string);
+        const data = await PaymentService.confirm(req.params.id as string, requestIdempotencyKey(req));
         sendSuccess(res, data, 'Payment confirmed and membership activated');
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to confirm payment';
@@ -67,7 +68,7 @@ export const confirm = async (req: AuthRequest, res: Response): Promise<void> =>
 
 export const reject = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await PaymentService.reject(req.params.id as string);
+        const data = await PaymentService.reject(req.params.id as string, requestIdempotencyKey(req));
         sendSuccess(res, data, 'Payment request rejected');
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to reject payment request';

@@ -1,3 +1,9 @@
+// Process-local TTL memoization. These caches are a performance layer only:
+// correctness must never depend on a hit, a miss, or invalidate() being
+// observed — invalidation does not propagate across instances, so under
+// horizontal scaling the TTL is the maximum staleness bound. Never gate an
+// authorization decision on cached state. Inventory and staleness contract:
+// server/docs/caching.md.
 export const createAsyncCache = <T>(ttlMs: number) => {
     let value: T | undefined;
     let expiresAt = 0;

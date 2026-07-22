@@ -17,27 +17,8 @@ const monthBuckets = () => {
     });
 };
 
-export const getMonthlyRevenue = async () => {
-    const buckets = monthBuckets();
-    const first = new Date(`${buckets[0].key}-01T00:00:00`);
-    const now = new Date();
-    const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    const { data, error } = await supabase
-        .from('payments')
-        .select('amount, date')
-        .eq('status', 'completed')
-        .gte('date', isoDate(first))
-        .lte('date', isoDate(last));
-
-    if (error) throw new Error(error.message);
-    const byMonth = new Map(buckets.map((bucket) => [bucket.key, bucket]));
-    for (const payment of data ?? []) {
-        const bucket = byMonth.get(String(payment.date).slice(0, 7));
-        if (bucket) bucket.value += Number(payment.amount) || 0;
-    }
-    return buckets.map(({ label, value }) => ({ label, value }));
-};
-
+// Date boundaries are computed here and passed to the RPC so the query stays
+// bounded; the database returns aggregates only, never payment rows.
 const getRevenueOverview = async () => {
     const buckets = monthBuckets();
     const firstBucketDate = `${buckets[0].key}-01`;
@@ -47,57 +28,27 @@ const getRevenueOverview = async () => {
     const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
     const monthEnd = isoDate(new Date(now.getFullYear(), now.getMonth() + 1, 0));
 
-    const { data, error } = await supabase
-        .from('payments')
-        .select('amount, date')
-        .eq('status', 'completed')
-        .gte('date', queryStart)
-        .lte('date', monthEnd);
+    const { data, error } = await supabase.rpc('revenue_overview', {
+        p_from: queryStart,
+        p_to: monthEnd,
+        p_month_start: monthStart,
+        p_year_start: yearStart,
+    });
     if (error) throw new Error(error.message);
 
     const byMonth = new Map(buckets.map((bucket) => [bucket.key, bucket]));
-    let monthlyRevenue = 0;
-    let yearlyRevenue = 0;
-    for (const payment of data ?? []) {
-        const amount = Number(payment.amount) || 0;
-        const date = String(payment.date);
-        const bucket = byMonth.get(date.slice(0, 7));
-        if (bucket) bucket.value += amount;
-        if (date >= monthStart) monthlyRevenue += amount;
-        if (date >= yearStart) yearlyRevenue += amount;
+    for (const row of data?.monthly ?? []) {
+        const bucket = byMonth.get(String(row.month));
+        if (bucket) bucket.value = Number(row.total) || 0;
     }
 
     return {
         monthlyRevenue: buckets.map(({ label, value }) => ({ label, value })),
-        paymentStats: { monthly_revenue: monthlyRevenue, yearly_revenue: yearlyRevenue },
+        paymentStats: {
+            monthly_revenue: Number(data?.monthly_revenue) || 0,
+            yearly_revenue: Number(data?.yearly_revenue) || 0,
+        },
     };
-};
-
-export const getWeeklyAttendance = async () => {
-    const now = new Date();
-    const monday = new Date(now);
-    const day = now.getDay();
-    monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-
-    const { data, error } = await supabase
-        .from('attendance')
-        .select('date')
-        .gte('date', isoDate(monday))
-        .lte('date', isoDate(sunday));
-    if (error) throw new Error(error.message);
-
-    const counts = new Map<string, number>();
-    for (const record of data ?? []) {
-        counts.set(record.date, (counts.get(record.date) ?? 0) + 1);
-    }
-    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return labels.map((label, index) => {
-        const date = new Date(monday);
-        date.setDate(monday.getDate() + index);
-        return { label, value: counts.get(isoDate(date)) ?? 0 };
-    });
 };
 
 const getAttendanceOverview = async () => {
@@ -109,23 +60,16 @@ const getAttendanceOverview = async () => {
     sunday.setDate(monday.getDate() + 6);
     const today = isoDate(now);
 
-    const { data, error } = await supabase
-        .from('attendance')
-        .select('date, check_out')
-        .gte('date', isoDate(monday))
-        .lte('date', isoDate(sunday));
+    const { data, error } = await supabase.rpc('attendance_week_overview', {
+        p_week_start: isoDate(monday),
+        p_week_end: isoDate(sunday),
+        p_today: today,
+    });
     if (error) throw new Error(error.message);
 
-    const counts = new Map<string, number>();
-    let todayTotal = 0;
-    let todayPresent = 0;
-    for (const record of data ?? []) {
-        counts.set(record.date, (counts.get(record.date) ?? 0) + 1);
-        if (record.date === today) {
-            todayTotal++;
-            if (!record.check_out) todayPresent++;
-        }
-    }
+    const counts = new Map<string, number>(
+        (data?.days ?? []).map((row: any): [string, number] => [String(row.date), Number(row.total) || 0]),
+    );
     const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const weeklyAttendance = labels.map((label, index) => {
         const date = new Date(monday);
@@ -135,29 +79,25 @@ const getAttendanceOverview = async () => {
 
     return {
         weeklyAttendance,
-        todayAttendance: { total: todayTotal, present: todayPresent },
+        todayAttendance: {
+            total: Number(data?.today_total) || 0,
+            present: Number(data?.today_present) || 0,
+        },
     };
 };
 
-export const getMemberGrowth = async () => {
-    const now = new Date();
-    const starts = Array.from({ length: 6 }, (_, index) =>
-        new Date(now.getFullYear(), now.getMonth() - (5 - index), 1));
-    const finalEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    const { data, error } = await supabase
-        .from('members')
-        .select('join_date')
-        .not('join_date', 'is', null)
-        .lte('join_date', isoDate(finalEnd));
+const getMemberGrowth = async () => {
+    const buckets = monthBuckets();
+    const { data, error } = await supabase.rpc('member_growth', {
+        p_first_month: `${buckets[0].key}-01`,
+        p_months: buckets.length,
+    });
     if (error) throw new Error(error.message);
 
-    return starts.map((start) => {
-        const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
-        return {
-            label: start.toLocaleString('en-US', { month: 'short' }),
-            value: (data ?? []).filter((member) => member.join_date <= isoDate(end)).length,
-        };
-    });
+    const totals = new Map<string, number>(
+        (data ?? []).map((row: any): [string, number] => [String(row.month), Number(row.total) || 0]),
+    );
+    return buckets.map(({ key, label }) => ({ label, value: totals.get(key) ?? 0 }));
 };
 
 export const getDashboard = async () => dashboardCache.get(async () => {

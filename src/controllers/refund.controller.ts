@@ -3,6 +3,7 @@ import { sendSuccess, sendError } from '../utils/response';
 import { AuthRequest } from '../types/express.d';
 import { parsePagination } from '../utils/pagination';
 import * as RefundService from '../services/refund.service';
+import { requestIdempotencyKey } from '../utils/idempotency';
 
 export const getAll = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -17,7 +18,7 @@ export const getAll = async (req: AuthRequest, res: Response): Promise<void> => 
 
 export const create = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await RefundService.create(req.body);
+        const data = await RefundService.create(req.body, requestIdempotencyKey(req));
         sendSuccess(res, data, 'Refund request created', 201);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to create refund';
@@ -27,7 +28,11 @@ export const create = async (req: AuthRequest, res: Response): Promise<void> => 
 
 export const updateStatus = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await RefundService.updateStatus(req.params.id as string, req.body.status);
+        const data = await RefundService.updateStatus(
+            req.params.id as string,
+            req.body.status,
+            requestIdempotencyKey(req),
+        );
         sendSuccess(res, data, `Refund ${req.body.status}`);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to update refund';

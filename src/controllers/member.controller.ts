@@ -1,8 +1,9 @@
 import { Response } from 'express';
 import { sendSuccess, sendError } from '../utils/response';
 import { AuthRequest } from '../types/express.d';
-import { parsePagination } from '../utils/pagination';
+import { parseCursorPagination, parsePagination } from '../utils/pagination';
 import * as MemberService from '../services/member.service';
+import { requestIdempotencyKey } from '../utils/idempotency';
 
 export const getAll = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -27,7 +28,11 @@ export const getById = async (req: AuthRequest, res: Response): Promise<void> =>
 
 export const activatePendingMember = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await MemberService.activatePendingMember(req.params.id as string, req.body);
+        const data = await MemberService.activatePendingMember(
+            req.params.id as string,
+            req.body,
+            requestIdempotencyKey(req),
+        );
         sendSuccess(res, data, 'Member added and activated');
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to activate member';
@@ -37,7 +42,11 @@ export const activatePendingMember = async (req: AuthRequest, res: Response): Pr
 
 export const renewMember = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await MemberService.renewMember(req.params.id as string, req.body);
+        const data = await MemberService.renewMember(
+            req.params.id as string,
+            req.body,
+            requestIdempotencyKey(req),
+        );
         sendSuccess(res, data, req.body.has_paid ? 'Membership renewed' : 'Renewal assigned; payment required');
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to renew member';
@@ -132,20 +141,14 @@ export const getMyPaymentRequest = async (req: AuthRequest, res: Response): Prom
 
 export const requestPayment = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await MemberService.requestPayment(req.user!.id, req.body);
+        const data = await MemberService.requestPayment(
+            req.user!.id,
+            req.body,
+            requestIdempotencyKey(req),
+        );
         sendSuccess(res, data, 'Payment request sent to the gym owner', 201);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to request payment';
-        sendError(res, message, 400);
-    }
-};
-
-export const activateWithPayment = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-        const data = await MemberService.activateWithPayment(req.user!.id, req.body);
-        sendSuccess(res, data, 'Membership activated');
-    } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Failed to activate membership';
         sendError(res, message, 400);
     }
 };
@@ -200,7 +203,7 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
 
 export const getMyAttendance = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await MemberService.getAttendanceByUserId(req.user!.id);
+        const data = await MemberService.getAttendanceByUserId(req.user!.id, parseCursorPagination(req));
         sendSuccess(res, data);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to fetch attendance';
@@ -210,7 +213,7 @@ export const getMyAttendance = async (req: AuthRequest, res: Response): Promise<
 
 export const getMyPayments = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await MemberService.getPaymentsByUserId(req.user!.id);
+        const data = await MemberService.getPaymentsByUserId(req.user!.id, parseCursorPagination(req));
         sendSuccess(res, data);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to fetch payments';
@@ -220,7 +223,7 @@ export const getMyPayments = async (req: AuthRequest, res: Response): Promise<vo
 
 export const getMyBroadcasts = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const data = await MemberService.getBroadcastsByUserId(req.user!.id);
+        const data = await MemberService.getBroadcastsByUserId(req.user!.id, parseCursorPagination(req));
         sendSuccess(res, data);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to fetch broadcasts';

@@ -3,6 +3,9 @@ import supabase from '../config/supabase';
 import { AuthRequest } from '../types/express.d';
 import { sendError } from '../utils/response';
 
+// Authorization decision — deliberately queries access_state fresh on every
+// request instead of any process-local cache, so blocking or cancelling a
+// member takes effect immediately on all instances (see server/docs/caching.md).
 export const requireWritableMembership = async (
     req: AuthRequest,
     res: Response,

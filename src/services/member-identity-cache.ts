@@ -1,5 +1,10 @@
 import supabase from '../config/supabase';
 
+// Maps a user's auth id to their own member row id. The mapping is written
+// once at registration and never re-pointed, so a cached entry can only go
+// stale if the member row is deleted (subsequent queries then 404) — it can
+// never resolve to another user's member row. Not authorization truth:
+// access_state gating always reads the database. See server/docs/caching.md.
 type CachedMemberId = { id: string; expiresAt: number };
 
 const CACHE_TTL_MS = 10 * 60 * 1000;

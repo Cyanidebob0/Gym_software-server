@@ -2,6 +2,31 @@ import supabase from '../config/supabase';
 import { get as getSettings } from './settings.service';
 import { computeStatus } from './member-management.service';
 import { getMemberIdByUserId, rememberMemberId } from './member-identity-cache';
+import { decodeCursor, encodeCursor } from '../utils/pagination';
+
+type HistoryOptions = { limit: number; cursor?: string };
+const DASHBOARD_ATTENDANCE_LIMIT = 10;
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+const timePattern = /^\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?$/;
+const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/;
+
+const assertCursorValue = (value: string, pattern: RegExp) => {
+    if (!pattern.test(value)) throw new Error('Invalid cursor');
+};
+
+const pageResult = <T>(rows: T[], limit: number, cursorFor: (row: T) => Record<string, string>, total?: number | null) => {
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+    return {
+        items,
+        limit,
+        next_cursor: hasMore && items.length > 0 ? encodeCursor(cursorFor(items[items.length - 1])) : null,
+        has_more: hasMore,
+        ...(total === undefined ? {} : { total: total ?? 0 }),
+    };
+};
 
 export const getMemberDashboardByUserId = async (userId: string) => {
     const [{ data: member, error: memberError }, settings] = await Promise.all([
@@ -49,10 +74,12 @@ export const getMemberDashboardByUserId = async (userId: string) => {
 
     const { data: attendance, error: attendanceError } = await supabase
         .from('attendance')
-        .select('date, check_in, check_out')
+        .select('id, date, check_in, check_out')
         .eq('member_id', member.id)
         .order('date', { ascending: false })
-        .order('check_in', { ascending: false });
+        .order('check_in', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(DASHBOARD_ATTENDANCE_LIMIT);
     if (attendanceError) throw new Error(attendanceError.message);
 
     const today = new Date().toISOString().slice(0, 10);
@@ -94,31 +121,65 @@ export const getProfileByUserId = async (userId: string) => {
     };
 };
 
-export const getAttendanceByUserId = async (userId: string) => {
+export const getAttendanceByUserId = async (userId: string, options: HistoryOptions) => {
     const memberId = await getMemberIdByUserId(userId);
+    const cursor = decodeCursor(options.cursor, ['date', 'check_in', 'id']);
+    if (cursor) {
+        assertCursorValue(cursor.date, datePattern);
+        assertCursorValue(cursor.check_in, timePattern);
+        assertCursorValue(cursor.id, uuidPattern);
+    }
 
-    const { data, error } = await supabase
-        .from('attendance')
-        .select('date, check_in, check_out')
+    const attendanceTable = supabase.from('attendance');
+    let query = options.cursor
+        ? attendanceTable.select('id, date, check_in, check_out')
+        : attendanceTable.select('id, date, check_in, check_out', { count: 'exact' });
+    query = query
         .eq('member_id', memberId)
         .order('date', { ascending: false })
-        .order('check_in', { ascending: false });
+        .order('check_in', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(options.limit + 1);
 
+    if (cursor) {
+        query = query.or(
+            `date.lt.${cursor.date},and(date.eq.${cursor.date},check_in.lt.${cursor.check_in}),and(date.eq.${cursor.date},check_in.eq.${cursor.check_in},id.lt.${cursor.id})`,
+        );
+    }
+
+    const { data, error, count } = await query;
     if (error) throw new Error(error.message);
-    return data;
+    return pageResult(data ?? [], options.limit, (row: any) => ({
+        date: row.date,
+        check_in: row.check_in,
+        id: row.id,
+    }), options.cursor ? undefined : count);
 };
 
-export const getPaymentsByUserId = async (userId: string) => {
+export const getPaymentsByUserId = async (userId: string, options: HistoryOptions) => {
     const memberId = await getMemberIdByUserId(userId);
+    const cursor = decodeCursor(options.cursor, ['date', 'id']);
+    if (cursor) {
+        assertCursorValue(cursor.date, datePattern);
+        assertCursorValue(cursor.id, uuidPattern);
+    }
 
-    const { data, error } = await supabase
+    let query = supabase
         .from('payments')
         .select('*, plans(name)')
         .eq('member_id', memberId)
-        .order('date', { ascending: false });
+        .order('date', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(options.limit + 1);
 
+    if (cursor) {
+        query = query.or(`date.lt.${cursor.date},and(date.eq.${cursor.date},id.lt.${cursor.id})`);
+    }
+
+    const { data, error } = await query;
     if (error) throw new Error(error.message);
-    return data.map((p: any) => ({ ...p, plan_name: p.plans?.name ?? null, plans: undefined }));
+    const rows = (data ?? []).map((p: any) => ({ ...p, plan_name: p.plans?.name ?? null, plans: undefined }));
+    return pageResult(rows, options.limit, (row: any) => ({ date: row.date, id: row.id }));
 };
 
 export const updateProfileByUserId = async (userId: string, body: { name?: string; phone?: string; address?: string; gender?: string }) => {
@@ -235,7 +296,7 @@ export const getTodayCheckIn = async (userId: string) => {
     return data[0];
 };
 
-export const getBroadcastsByUserId = async (userId: string) => {
+export const getBroadcastsByUserId = async (userId: string, options: HistoryOptions) => {
     const { data: member } = await supabase
         .from('members')
         .select('id, status, expiry_date')
@@ -244,12 +305,6 @@ export const getBroadcastsByUserId = async (userId: string) => {
 
     if (!member) throw new Error('Member not found');
 
-    const { data, error } = await supabase
-        .from('broadcasts')
-        .select('*')
-        .order('sent_at', { ascending: false });
-
-    if (error) throw new Error(error.message);
     const settings = await getSettings();
     const status = computeStatus(
         member,
@@ -257,10 +312,33 @@ export const getBroadcastsByUserId = async (userId: string) => {
         settings.grace_period_days ?? 3,
     );
 
-    return data.filter((broadcast: any) => {
-        if (!broadcast.target || broadcast.target === 'all') return true;
-        if (broadcast.target === 'active') return status === 'active';
-        if (broadcast.target === 'expiring') return status === 'expiring_soon';
-        return false;
-    });
+    const cursor = decodeCursor(options.cursor, ['sent_at', 'id']);
+    if (cursor) {
+        assertCursorValue(cursor.sent_at, timestampPattern);
+        assertCursorValue(cursor.id, uuidPattern);
+    }
+
+    const targets = ['all'];
+    if (status === 'active') targets.push('active');
+    if (status === 'expiring_soon') targets.push('expiring');
+
+    // Keep target selection in Postgres instead of loading every broadcast and filtering in Node.
+    const targetFilter = `or(target.is.null,target.in.(${targets.join(',')}))`;
+    const cursorFilter = cursor
+        ? `or(sent_at.lt.${cursor.sent_at},and(sent_at.eq.${cursor.sent_at},id.lt.${cursor.id}))`
+        : null;
+    let query = supabase
+        .from('broadcasts')
+        .select('*')
+        .order('sent_at', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(options.limit + 1);
+
+    query = cursorFilter
+        ? query.or(`and(${targetFilter},${cursorFilter})`)
+        : query.or(`target.is.null,target.in.(${targets.join(',')})`);
+
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    return pageResult(data ?? [], options.limit, (row: any) => ({ sent_at: row.sent_at, id: row.id }));
 };

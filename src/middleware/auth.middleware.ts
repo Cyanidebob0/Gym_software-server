@@ -9,6 +9,13 @@ import { isOwnerEmail } from '../config/whitelist';
 // ── Auth + profile cache ──────────────────────────────────────────────────────
 // Caches the full auth result (user identity + profile) keyed by token.
 // Avoids calling supabase.auth.getUser() on every request (1-10s network call).
+//
+// This cache is never authorization truth: every cached field derives from the
+// verified token's claims plus the static owner whitelist — no mutable database
+// state is memoized here. Entry lifetime is capped at min(5 min, token exp), so
+// an entry can never outlive the token that produced it. Mutable access checks
+// (e.g. member access_state) query the database directly in
+// membership-access.middleware.ts. See server/docs/caching.md.
 interface CachedAuth {
     id: string;
     email: string;

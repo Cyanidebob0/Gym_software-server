@@ -7,6 +7,8 @@
     "dev": "nodemon --watch src --ext ts --exec ts-node src/server.ts",
     "build": "tsc",
     "test": "npm run build && node --test test/*.test.js",
+    "test:financial-concurrency": "npm run build && node test/financial-concurrency.integration.js",
+    "fixture:attendance-large": "node scripts/seed-large-attendance-fixture.js",
     "start": "node dist/server.js"
   },
   "repository": {

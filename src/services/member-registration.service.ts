@@ -1,8 +1,8 @@
 import supabase from '../config/supabase';
 import { generateInvoiceId, invalidatePaymentCaches } from './payment.service';
-import { runSteps } from '../utils/transaction';
 import { get as getSettings } from './settings.service';
 import { randomUUID } from 'crypto';
+import { financialMutation } from '../utils/idempotency';
 
 const ID_DOCUMENT_BUCKET = 'member-id-documents';
 const ALLOWED_ID_DOCUMENT_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -128,139 +128,23 @@ export const getPaymentRequestByUserId = async (userId: string) => {
 export const requestPayment = async (
     userId: string,
     body: { plan_id: string; method: 'cash' | 'upi' },
+    idempotencyKey?: string,
 ) => {
-    const { data: member, error: memberError } = await supabase
-        .from('members')
-        .select('id, status, access_state, plan_id')
-        .eq('user_id', userId)
-        .single();
-
-    if (memberError || !member) throw new Error('Member not found');
-    const isInitialPayment = member.status === 'approved';
-    const canRequestPayment = ['approved', 'active', 'expired', 'expiring_soon'].includes(member.status);
-    if (!canRequestPayment) throw new Error('Your membership is not ready for a payment request');
-    if (member.access_state === 'blocked' || member.access_state === 'cancelled') {
-        throw new Error('This membership cannot request a payment');
-    }
-    if (isInitialPayment && member.plan_id && member.plan_id !== body.plan_id) {
-        throw new Error('Choose the plan assigned by the gym owner');
-    }
-
-    const [{ data: plan, error: planError }, existingRequest] = await Promise.all([
-        supabase
-            .from('plans')
-            .select('id, name, duration_days, price')
-            .eq('id', body.plan_id)
-            .eq('is_active', true)
-            .single(),
-        getPaymentRequestByUserId(userId),
-    ]);
-
-    if (planError || !plan) throw new Error('Active membership plan not found');
-    if (existingRequest) return existingRequest;
-
     const invoiceId = await generateInvoiceId();
-    const today = new Date().toISOString().slice(0, 10);
-    const { data, error } = await supabase
-        .from('payments')
-        .insert({
-            member_id: member.id,
-            plan_id: plan.id,
-            amount: plan.price,
-            mode: 'offline',
-            method: body.method,
-            status: 'pending',
-            date: today,
-            invoice_id: invoiceId,
-        })
-        .select()
-        .single();
-
+    const mutation = financialMutation(
+        'request_payment',
+        { userId, planId: body.plan_id, method: body.method },
+        idempotencyKey,
+    );
+    const { data, error } = await supabase.rpc('financial_request_payment', {
+        p_user_id: userId,
+        p_plan_id: body.plan_id,
+        p_method: body.method,
+        p_invoice_id: invoiceId,
+        p_idempotency_key: mutation.idempotencyKey,
+        p_request_hash: mutation.requestHash,
+    });
     if (error || !data) throw new Error(error?.message || 'Failed to create payment request');
     invalidatePaymentCaches();
-    return {
-        ...data,
-        plan_name: plan.name,
-        duration_days: plan.duration_days,
-    };
-};
-
-export const activateWithPayment = async (userId: string, body: { plan_id: string; method: string; amount: number }) => {
-    const { data: member } = await supabase
-        .from('members')
-        .select('id, status, plan_id, join_date, expiry_date')
-        .eq('user_id', userId)
-        .single();
-
-    if (!member) throw new Error('Member not found');
-    if (member.status !== 'approved') throw new Error('Member not approved yet');
-    if (member.plan_id && member.plan_id !== body.plan_id) throw new Error('Pay for the plan assigned by the gym owner');
-
-    const { data: plan } = await supabase
-        .from('plans')
-        .select('*')
-        .eq('id', body.plan_id)
-        .single();
-
-    if (!plan) throw new Error('Plan not found');
-
-    const today = new Date().toISOString().split('T')[0];
-    const joinDate = member.join_date || today;
-    const expiry = new Date(`${joinDate}T00:00:00.000Z`);
-    expiry.setUTCDate(expiry.getUTCDate() + plan.duration_days);
-    const expiryDate = member.expiry_date || expiry.toISOString().split('T')[0];
-    const nextStatus = expiryDate >= today ? 'active' : 'expired';
-
-    const previousStatus = member.status;
-
-    await runSteps([
-        {
-            execute: async () => {
-                const { error } = await supabase
-                    .from('members')
-                    .update({
-                        plan_id: body.plan_id,
-                        status: nextStatus,
-                        join_date: joinDate,
-                        expiry_date: expiryDate,
-                    })
-                    .eq('id', member.id);
-                if (error) throw new Error(error.message);
-            },
-            rollback: async () => {
-                await supabase
-                    .from('members')
-                    .update({ plan_id: member.plan_id, status: previousStatus, join_date: member.join_date, expiry_date: member.expiry_date })
-                    .eq('id', member.id);
-            },
-        },
-        {
-            execute: async () => {
-                const invoice_id = await generateInvoiceId();
-                const { error } = await supabase
-                    .from('payments')
-                    .insert({
-                        member_id: member.id,
-                        plan_id: body.plan_id,
-                        amount: plan.price,
-                        method: body.method,
-                        mode: 'offline',
-                        status: 'completed',
-                        date: today,
-                        invoice_id,
-                    });
-                if (error) throw new Error(error.message);
-            },
-            rollback: async () => {
-                await supabase
-                    .from('payments')
-                    .delete()
-                    .eq('member_id', member.id)
-                    .eq('date', today)
-                    .eq('plan_id', body.plan_id);
-            },
-        },
-    ]);
-
-    return { status: nextStatus, expiry_date: expiryDate };
+    return data;
 };
