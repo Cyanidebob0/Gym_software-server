@@ -62,3 +62,13 @@ export const toggle = async (req: AuthRequest, res: Response): Promise<void> => 
         sendError(res, message, 400);
     }
 };
+
+export const recommend = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const data = await PlanService.recommend(req.params.id as string);
+        sendSuccess(res, data, 'Recommended plan updated');
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to recommend plan';
+        sendError(res, message, 400);
+    }
+};

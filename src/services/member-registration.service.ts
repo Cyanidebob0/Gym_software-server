@@ -85,6 +85,7 @@ export const getActivePlansByUserId = async (userId: string) => {
         .from('plans')
         .select('*')
         .eq('is_active', true)
+        .order('is_recommended', { ascending: false })
         .order('price', { ascending: true });
 
     // During initial activation the owner-assigned plan remains authoritative.

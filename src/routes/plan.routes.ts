@@ -15,5 +15,6 @@ router.get('/:id', PlanController.getById);
 router.post('/', validate(createPlanSchema), PlanController.create);
 router.patch('/:id', validate(updatePlanSchema), PlanController.update);
 router.patch('/:id/toggle', PlanController.toggle);
+router.patch('/:id/recommend', PlanController.recommend);
 
 export default router;
