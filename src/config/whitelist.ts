@@ -3,6 +3,7 @@
 
 export const OWNER_ALLOWED_EMAILS: string[] = [
     'owner.test@gmail.com',
+    'nandumohith@gmail.com',
 ];
 
 export const isOwnerEmail = (email?: string): boolean =>
