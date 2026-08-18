@@ -2,10 +2,11 @@ import { Response } from 'express';
 import { sendSuccess, sendError } from '../utils/response';
 import { AuthRequest } from '../types/express.d';
 import * as AttendanceService from '../services/attendance.service';
+import { gymDateString } from '../utils/gym-time';
 
 export const getByDate = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const date = (req.params.date as string) || new Date().toISOString().split('T')[0];
+        const date = (req.params.date as string) || gymDateString();
         const data = await AttendanceService.getByDate(date);
         sendSuccess(res, data);
     } catch (err: unknown) {

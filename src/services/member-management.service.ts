@@ -3,6 +3,7 @@ import { get as getSettings } from './settings.service';
 import { generateInvoiceId, invalidatePaymentCaches } from './payment.service';
 import { createAsyncCache } from '../utils/async-cache';
 import { financialMutation } from '../utils/idempotency';
+import { gymDateString } from '../utils/gym-time';
 
 const memberStatsCache = createAsyncCache<Record<string, number>>(10_000);
 
@@ -147,7 +148,7 @@ export const activatePendingMember = async (
     body: PendingMemberActivationInput,
     idempotencyKey?: string,
 ) => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = gymDateString();
     if (body.join_date > today) throw new Error('Membership start date cannot be in the future');
     if (body.has_paid && body.payment_date && body.payment_date > today) {
         throw new Error('Payment date cannot be in the future');
@@ -180,7 +181,7 @@ export const renewMember = async (
     body: RenewalInput,
     idempotencyKey?: string,
 ) => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = gymDateString();
     if (body.has_paid && body.payment_date && body.payment_date > today) {
         throw new Error('Payment date cannot be in the future');
     }

@@ -2,6 +2,7 @@ import supabase from '../config/supabase';
 import { createAsyncCache } from '../utils/async-cache';
 import { randomBytes } from 'node:crypto';
 import { financialMutation } from '../utils/idempotency';
+import { gymDateString } from '../utils/gym-time';
 
 const paymentStatsCache = createAsyncCache<{ monthly_revenue: number; yearly_revenue: number }>(15_000);
 const pendingCountCache = createAsyncCache<{ count: number }>(5_000);
@@ -85,10 +86,14 @@ export const create = async (body: Record<string, any>, idempotencyKey?: string)
 // Aggregated in SQL with bounded date predicates; the yearly total is capped
 // at the end of the current month (payment dates cannot be in the future).
 export const getStats = async () => paymentStatsCache.get(async () => {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-    const startOfYear = `${now.getFullYear()}-01-01`;
+    // Month bounds are gym-local calendar edges. Building them from a host-local
+    // Date and then calling toISOString() shifts them across the UTC boundary,
+    // landing on the previous month's last day when the host runs in IST.
+    const [year, month] = gymDateString().split('-').map(Number);
+    const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
+    const startOfMonth = `${monthPrefix}-01`;
+    const endOfMonth = `${monthPrefix}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`;
+    const startOfYear = `${year}-01-01`;
 
     const { data, error } = await supabase.rpc('revenue_overview', {
         p_from: startOfYear,

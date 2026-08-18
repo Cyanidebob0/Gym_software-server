@@ -345,6 +345,47 @@ const readLocalDataset = async (): Promise<RawExercise[]> => {
 let datasetPromise: Promise<NormalizedExercise[]> | null = null;
 const detailCache = new Map<string, NormalizedExercise>();
 
+// Reverse index from a dataset muscle name to the beginner groups that accept
+// it, so the per-group equipment map costs a single pass over the dataset.
+const MUSCLE_TO_GROUPS = (() => {
+    const map = new Map<string, string[]>();
+    for (const label of MUSCLE_GROUP_LABELS) {
+        const key = label.toLowerCase();
+        for (const muscle of MUSCLE_GROUPS[key] ?? [key]) {
+            const groups = map.get(muscle) ?? [];
+            groups.push(key);
+            map.set(muscle, groups);
+        }
+    }
+    return map;
+})();
+
+// Equipment that actually has at least one exercise per beginner muscle group,
+// keyed by lowercased group label. Uses the same primary-target matching as
+// matchesFilter so a chip is never offered that would return zero results.
+let equipmentByGroupCache: Record<string, string[]> = {};
+
+const buildEquipmentByGroup = (dataset: NormalizedExercise[]) => {
+    const sets = new Map<string, Set<string>>();
+    for (const exercise of dataset) {
+        const groups = new Set<string>();
+        for (const m of exercise.muscles) {
+            for (const group of MUSCLE_TO_GROUPS.get(m.name.toLowerCase()) ?? []) {
+                groups.add(group);
+            }
+        }
+        for (const group of groups) {
+            let set = sets.get(group);
+            if (!set) {
+                set = new Set<string>();
+                sets.set(group, set);
+            }
+            for (const eq of exercise.equipment) set.add(eq.name);
+        }
+    }
+    return Object.fromEntries([...sets].map(([group, set]) => [group, dedupeSorted(set)]));
+};
+
 const MEDIA_PROBE_CONCURRENCY = 12;
 
 const hasUsableMedia = async (record: RawExercise): Promise<boolean> => {
@@ -498,6 +539,7 @@ const buildDataset = async (forceRefresh = false): Promise<NormalizedExercise[]>
     for (const exercise of normalized) {
         detailCache.set(String(exercise.id), exercise);
     }
+    equipmentByGroupCache = buildEquipmentByGroup(normalized);
 
     return normalized;
 };
@@ -593,6 +635,11 @@ export const getMuscleGroups = () => [...MUSCLE_GROUP_LABELS];
 export const getEquipmentList = async () => {
     const dataset = await loadDataset();
     return dedupeSorted(dataset.flatMap((e) => e.equipment.map((eq) => eq.name)));
+};
+
+export const getEquipmentByMuscleGroup = async () => {
+    await loadDataset();
+    return equipmentByGroupCache;
 };
 
 export const warmExerciseCache = async () => {

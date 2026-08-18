@@ -3,6 +3,7 @@ import { get as getSettings } from './settings.service';
 import { computeStatus } from './member-management.service';
 import { getMemberIdByUserId, rememberMemberId } from './member-identity-cache';
 import { decodeCursor, encodeCursor } from '../utils/pagination';
+import { gymDateString, gymTimeString } from '../utils/gym-time';
 
 type HistoryOptions = { limit: number; cursor?: string };
 const DASHBOARD_ATTENDANCE_LIMIT = 10;
@@ -82,7 +83,7 @@ export const getMemberDashboardByUserId = async (userId: string) => {
         .limit(DASHBOARD_ATTENDANCE_LIMIT);
     if (attendanceError) throw new Error(attendanceError.message);
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = gymDateString();
     const todayCheckIn = (attendance ?? []).find((record) => record.date === today) ?? null;
     const profile = {
         ...member,
@@ -222,8 +223,8 @@ export const selfCheckIn = async (userId: string) => {
     );
     if (!['active', 'expiring_soon'].includes(status)) throw new Error('Membership not active');
 
-    const today = new Date().toISOString().split('T')[0];
-    const checkIn = new Date().toTimeString().slice(0, 5);
+    const today = gymDateString();
+    const checkIn = gymTimeString();
 
     const { data: existing } = await supabase
         .from('attendance')
@@ -250,8 +251,8 @@ export const selfCheckIn = async (userId: string) => {
 export const selfCheckOut = async (userId: string) => {
     const memberId = await getMemberIdByUserId(userId);
 
-    const today = new Date().toISOString().split('T')[0];
-    const checkOut = new Date().toTimeString().slice(0, 5);
+    const today = gymDateString();
+    const checkOut = gymTimeString();
 
     const { data: open } = await supabase
         .from('attendance')
@@ -282,7 +283,7 @@ export const getTodayCheckIn = async (userId: string) => {
         return null;
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = gymDateString();
 
     const { data } = await supabase
         .from('attendance')

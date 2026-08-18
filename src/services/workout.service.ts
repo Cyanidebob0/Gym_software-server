@@ -1,6 +1,7 @@
 import supabase from '../config/supabase';
 import {
     getBodyParts,
+    getEquipmentByMuscleGroup,
     getEquipmentList,
     getExerciseById,
     getMuscleGroups,
@@ -72,12 +73,15 @@ export const getExerciseDetail = async (exerciseId: ExerciseId) => {
 };
 
 export const getExerciseFilters = async () => {
-    const [bodyParts, muscles, equipments] = await Promise.all([
+    const [bodyParts, muscles, equipments, equipmentsByGroup] = await Promise.all([
         getBodyParts(),
         getMuscleList(),
         getEquipmentList(),
+        getEquipmentByMuscleGroup(),
     ]);
-    return { bodyParts, muscles, muscleGroups: getMuscleGroups(), equipments };
+    // equipmentsByGroup lets the client hide equipment chips that would return
+    // zero results for the selected body area, without a round trip per tap.
+    return { bodyParts, muscles, muscleGroups: getMuscleGroups(), equipments, equipmentsByGroup };
 };
 
 export const refreshExercises = async () => {

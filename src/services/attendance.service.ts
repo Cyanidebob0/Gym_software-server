@@ -1,4 +1,5 @@
 import supabase from '../config/supabase';
+import { gymDateString, gymTimeString } from '../utils/gym-time';
 
 export const getByDate = async (date: string) => {
     const { data, error } = await supabase
@@ -27,7 +28,7 @@ export const getByMember = async (memberId: string) => {
 };
 
 export const getTodayStats = async () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = gymDateString();
 
     const { data, error } = await supabase
         .from('attendance')
@@ -42,7 +43,7 @@ export const getTodayStats = async () => {
 };
 
 export const markIn = async (body: { member_id: string; check_in: string; date?: string }) => {
-    const date = body.date || new Date().toISOString().split('T')[0];
+    const date = body.date || gymDateString();
 
     const { data, error } = await supabase
         .from('attendance')

@@ -5,7 +5,7 @@ const memberDetailsSchema = z.object({
     phone: z.string().trim().regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit Indian mobile number'),
     email: z.string().trim().email('Enter a valid email address').optional().or(z.literal('')),
     address: z.string().trim().max(500).optional(),
-    gov_id_type: z.enum(['aadhaar', 'pan', 'voter_id', 'passport', 'driving_license']).optional(),
+    gov_id_type: z.enum(['pan', 'voter_id', 'passport', 'driving_license']).optional(),
     gov_id_number: z.string().trim().max(100).optional(),
 });
 
@@ -81,7 +81,9 @@ export const selfRegisterMemberSchema = z.object({
         .min(10, 'Address must be at least 10 characters')
         .max(500, 'Address cannot exceed 500 characters'),
     gov_id_type: z.enum(
-        ['aadhaar', 'pan', 'voter_id', 'passport', 'driving_license'],
+        // Aadhaar removed: storing the number requires a UIDAI-compliant
+        // encrypted vault, which this installation does not provide.
+        ['pan', 'voter_id', 'passport', 'driving_license'],
         { message: 'Select an ID type' },
     ),
 });

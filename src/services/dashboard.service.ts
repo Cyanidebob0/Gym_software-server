@@ -1,8 +1,10 @@
 import supabase from '../config/supabase';
 import { getStats as getMemberStats, getAll as getAllMembers } from './member-management.service';
 import { createAsyncCache } from '../utils/async-cache';
+import { gymDateString, gymTimeString } from '../utils/gym-time';
 
-const isoDate = (date: Date) => date.toISOString().split('T')[0];
+// Gym-local day: the UTC day rolls over 5.5h early for an IST gym.
+const isoDate = (date: Date) => gymDateString(date);
 const dashboardCache = createAsyncCache<Record<string, any>>(15_000);
 
 const monthBuckets = () => {
