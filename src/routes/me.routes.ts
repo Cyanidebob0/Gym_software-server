@@ -3,7 +3,7 @@ import multer from 'multer';
 import { authenticate } from '../middleware/auth.middleware';
 import { authorize } from '../middleware/role.middleware';
 import { validate } from '../middleware/validate.middleware';
-import { selfRegisterMemberSchema, memberPaymentRequestSchema, updateProfileSchema } from '../validators/member.validator';
+import { selfRegisterMemberSchema, memberPaymentRequestSchema, updateProfileSchema, dataRequestSchema } from '../validators/member.validator';
 import * as MemberController from '../controllers/member.controller';
 import { AuthRequest } from '../types/express.d';
 import { requireWritableMembership } from '../middleware/membership-access.middleware';
@@ -47,6 +47,12 @@ router.patch('/profile', requireWritableMembership, validate(updateProfileSchema
 router.get('/attendance', MemberController.getMyAttendance);
 router.get('/payments', MemberController.getMyPayments);
 router.get('/broadcasts', MemberController.getMyBroadcasts);
+
+// Data Principal rights (DPDP Act sections 6(4), 11, 12, 13). Deliberately not
+// behind requireWritableMembership: withdrawing consent or asking for erasure
+// must stay available even when a membership has lapsed into read-only.
+router.get('/data-requests', MemberController.getMyDataRequests);
+router.post('/data-requests', validate(dataRequestSchema), MemberController.createMyDataRequest);
 
 // Self check-in/out
 router.get('/today-checkin', MemberController.getTodayCheckIn);

@@ -260,3 +260,23 @@ export const getTodayCheckIn = async (req: AuthRequest, res: Response): Promise<
         sendError(res, message, 400);
     }
 };
+
+export const createMyDataRequest = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const data = await MemberService.createDataRequest(req.user!.id, req.body);
+        sendSuccess(res, data, 'Request received');
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to submit request';
+        sendError(res, message, 400);
+    }
+};
+
+export const getMyDataRequests = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const data = await MemberService.getDataRequestsByUserId(req.user!.id);
+        sendSuccess(res, data);
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to fetch requests';
+        sendError(res, message, 400);
+    }
+};

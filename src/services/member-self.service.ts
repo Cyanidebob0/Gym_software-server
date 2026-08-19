@@ -343,3 +343,54 @@ export const getBroadcastsByUserId = async (userId: string, options: HistoryOpti
     if (error) throw new Error(error.message);
     return pageResult(data ?? [], options.limit, (row: any) => ({ sent_at: row.sent_at, id: row.id }));
 };
+
+/**
+ * Data Principal rights requests (DPDP Act 2023, Sections 6(4), 11, 12 and 13).
+ *
+ * Requests are recorded for a human to action rather than executed on the spot.
+ * Erasure in particular cannot be automatic: payment and invoice records are
+ * retained under a legal obligation and a refusal has to be explained, which
+ * Rule 17 expects to be evidenced rather than asserted.
+ */
+export const createDataRequest = async (
+    userId: string,
+    body: { kind: string; details?: string },
+) => {
+    const memberId = await getMemberIdByUserId(userId).catch(() => null);
+
+    // One open request per kind, so a repeated tap does not create a queue of
+    // duplicates the gym then has to reconcile.
+    const { data: existing } = await supabase
+        .from('data_requests')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('kind', body.kind)
+        .in('status', ['open', 'in_progress'])
+        .maybeSingle();
+    if (existing) return existing;
+
+    const { data, error } = await supabase
+        .from('data_requests')
+        .insert({
+            user_id: userId,
+            member_id: memberId,
+            kind: body.kind,
+            details: body.details ?? null,
+        })
+        .select('*')
+        .single();
+
+    if (error) throw new Error(error.message);
+    return data;
+};
+
+export const getDataRequestsByUserId = async (userId: string) => {
+    const { data, error } = await supabase
+        .from('data_requests')
+        .select('id, kind, status, details, response, created_at, resolved_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+    if (error) throw new Error(error.message);
+    return data ?? [];
+};

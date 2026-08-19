@@ -6,7 +6,11 @@ const memberDetailsSchema = z.object({
     email: z.string().trim().email('Enter a valid email address').optional().or(z.literal('')),
     address: z.string().trim().max(500).optional(),
     gov_id_type: z.enum(['pan', 'voter_id', 'passport', 'driving_license']).optional(),
-    gov_id_number: z.string().trim().max(100).optional(),
+    // ID numbers are no longer collected. The scanned document is sufficient to
+    // verify identity, and holding the number in plain text is the single
+    // largest breach exposure under DPDP Rule 7 (security safeguards) for no
+    // operational gain. Rejected outright rather than quietly ignored.
+    gov_id_number: z.undefined({ message: 'ID numbers are no longer collected' }),
 });
 
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a valid date');
@@ -106,4 +110,12 @@ export const updateProfileSchema = z.object({
     gender: z.string().max(20).optional(),
 }).refine((data) => Object.keys(data).length > 0, {
     message: 'At least one field must be provided',
+});
+
+// Data Principal rights requests. 'withdraw_consent' covers only the
+// consent-based processing; membership and financial records continue under
+// the Section 7 legitimate uses named in the Privacy Policy.
+export const dataRequestSchema = z.object({
+    kind: z.enum(['access', 'correction', 'erasure', 'withdraw_consent']),
+    details: z.string().trim().max(2000).optional(),
 });
